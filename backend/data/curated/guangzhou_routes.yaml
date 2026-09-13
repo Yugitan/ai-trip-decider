@@ -1,0 +1,693 @@
+# 广州精选路线模板（人工整理）
+#
+# 用途：冷启动时直接命中 L3（热门路线库），避免每次都从零组合（PRD §15.1）。
+#
+# ★ 诚实性约定 ★
+#   - stops 里的 name 必须是**真实存在的地点名**，建库时会去知识库里解析。
+#     解析不到的站点会被如实报告（不会被悄悄删掉或替换成别的点）。
+#   - 本文件**不提供**任何营业时间 / 价格 / 距离 / 时长事实。
+#     路线时长与步行距离由建库脚本根据站点坐标**估算**并标记为估算值，
+#     营业时间与票价一律沿用各地点的真实来源状态（大多为 unknown）。
+#   - best_for / description 是编辑性描述（帮助用户选择），不是事实断言。
+
+version: "2026.09.1"
+city: guangzhou
+
+routes:
+  # ══ A 轻松休闲 ═════════════════════════════════════════════════════════════
+  - slug: gz-xiguan-slow
+    name: 西关慢游
+    route_type: citywalk
+    archetype_hint: relaxed
+    pace: relaxed
+    difficulty: easy
+    description: 三个点全在老西关，步行串联，早茶开场、骑楼收尾，几乎不用赶路。
+    recommended_start_time: "09:30"
+    recommended_end_time: "16:30"
+    best_for: [情侣, 不想走太多路, 第一次来]
+    stops:
+      - {name: 陈家祠, stay_min: 90, note: 岭南建筑代表，木雕砖雕值得细看}
+      - {name: 荔湾博物馆, stay_min: 60, note: 西关大屋与民俗，就在荔湾湖旁}
+      - {name: 上下九步行街, stay_min: 90, note: 顺路吃点老字号小吃}
+
+  - slug: gz-shamian-tea
+    name: 沙面下午茶
+    route_type: couple
+    archetype_hint: relaxed
+    pace: relaxed
+    difficulty: easy
+    description: 欧陆建筑群散步 + 江边下午茶，节奏最松的一套。
+    recommended_start_time: "13:00"
+    recommended_end_time: "19:00"
+    best_for: [情侣, 拍照, 慢节奏]
+    stops:
+      - {name: 沙面, stay_min: 120, note: 全岛都是取景点，建议留足时间}
+      - {name: 石室圣心大教堂, stay_min: 45, note: 就在沙面对面，过桥即到}
+      - {name: 海心沙亚运公园, stay_min: 90, note: 江边散步，傍晚光线最好}
+
+  - slug: gz-yuexiu-half-day
+    name: 越秀公园半日
+    route_type: nature
+    archetype_hint: relaxed
+    pace: relaxed
+    difficulty: easy
+    description: 公园 + 纪念堂 + 镇海楼，爬山强度低，树荫多。
+    recommended_start_time: "09:00"
+    recommended_end_time: "15:00"
+    best_for: [带父母, 亲子, 避暑]
+    stops:
+      - {name: 越秀公园, stay_min: 120, note: 五羊石像与明代城墙}
+      - {name: 中山纪念堂, stay_min: 60, note: 就在公园南门对面}
+      - {name: 广州博物馆, stay_min: 90, note: 镇海楼，登高看老城}
+
+  - slug: gz-liwan-lake-slow
+    name: 荔湾湖畔慢行
+    route_type: relax
+    archetype_hint: relaxed
+    pace: relaxed
+    difficulty: easy
+    description: 湖边走一圈，博物馆歇脚，最后在园林酒家吃一顿。
+    recommended_start_time: "10:00"
+    recommended_end_time: "16:00"
+    best_for: [带父母, 情侣, 美食]
+    stops:
+      - {name: 荔湾湖公园, stay_min: 90, note: 西关最舒服的一片水面}
+      - {name: 荔湾博物馆, stay_min: 60, note: 西关大屋与民俗}
+      - {name: 泮溪酒家, stay_min: 90, note: 园林式老字号，适合坐下来慢慢吃}
+
+  - slug: gz-tianhe-afternoon
+    name: 天河轻松午后
+    route_type: relax
+    archetype_hint: relaxed
+    pace: relaxed
+    difficulty: easy
+    description: 商场避暑 + 广场散步 + 江边夜景，全程地铁可达。
+    recommended_start_time: "14:00"
+    recommended_end_time: "21:00"
+    best_for: [购物, 雨天, 情侣]
+    stops:
+      - {name: 太古汇, stay_min: 120, note: 室内为主，下雨也不影响}
+      - {name: 花城广场, stay_min: 60, note: 傍晚走一段中轴线}
+      - {name: 海心沙亚运公园, stay_min: 60, note: 看小蛮腰最近的江边位置}
+
+  - slug: gz-family-zoo-easy
+    name: 亲子轻松动物园
+    route_type: family
+    archetype_hint: relaxed
+    pace: relaxed
+    difficulty: easy
+    description: 只安排两个点，中间安排午休，适合带小小孩。
+    recommended_start_time: "09:30"
+    recommended_end_time: "16:00"
+    best_for: [亲子, 学龄前, 户外]
+    stops:
+      - {name: 广州动物园, stay_min: 180, note: 园区大，建议先看重点馆}
+      - {name: 云台花园, stay_min: 90, note: 紧邻动物园，花境适合拍照}
+      - {name: 中山纪念堂, stay_min: 60, note: 地铁两站可达，室内为主，累了也能歇}
+
+  - slug: gz-haizhu-lake-slow
+    name: 海珠湖慢走
+    route_type: nature
+    archetype_hint: relaxed
+    pace: relaxed
+    difficulty: easy
+    description: 湖景 + 仓储改造的江边园区，晚上有灯光。
+    recommended_start_time: "15:00"
+    recommended_end_time: "21:00"
+    best_for: [情侣, 夜景, 散步]
+    stops:
+      - {name: 海珠湖公园, stay_min: 120, note: 环湖步道平坦，适合慢走}
+      - {name: 太古仓码头, stay_min: 90, note: 老仓库改造，傍晚到夜里最好看}
+      - {name: 广州塔, stay_min: 90, note: 从太古仓过江就是，夜景收尾}
+
+  - slug: gz-xiguan-culture-half
+    name: 西关文化半日
+    route_type: culture
+    archetype_hint: relaxed
+    pace: relaxed
+    difficulty: easy
+    description: 三处文化点串成半天，讲解密度高但不费体力。
+    recommended_start_time: "09:00"
+    recommended_end_time: "15:00"
+    best_for: [文化, 带父母, 第一次来]
+    stops:
+      - {name: 陈家祠, stay_min: 90, note: 岭南工艺集大成}
+      - {name: 荔湾博物馆, stay_min: 60, note: 西关民居与市井}
+      - {name: 光孝寺, stay_min: 60, note: 广州最古老的佛寺之一}
+
+  # ══ B 经典打卡 ═════════════════════════════════════════════════════════════
+  - slug: gz-classic-one-day
+    name: 广州经典一日
+    route_type: classic
+    archetype_hint: classic
+    pace: balanced
+    difficulty: moderate
+    description: 一次走完老城与珠江，第一次来广州最稳的一套。
+    recommended_start_time: "09:00"
+    recommended_end_time: "21:00"
+    best_for: [第一次来, 经典, 情侣]
+    stops:
+      - {name: 陈家祠, stay_min: 90, note: 老城文化起点}
+      - {name: 沙面, stay_min: 90, note: 欧陆建筑群}
+      - {name: 上下九步行街, stay_min: 90, note: 顺路吃老字号}
+      - {name: 珠江夜游, stay_min: 100, note: 夜景收尾}
+
+  - slug: gz-twin-tower-night
+    name: 双塔夜景线
+    route_type: night_view
+    archetype_hint: classic
+    pace: balanced
+    difficulty: easy
+    description: 从下午到夜里，把中轴线与珠江夜景一次看完。
+    recommended_start_time: "15:00"
+    recommended_end_time: "22:00"
+    best_for: [夜景, 情侣, 拍照]
+    stops:
+      - {name: 花城广场, stay_min: 60, note: 中轴线起点}
+      - {name: 广州塔, stay_min: 120, note: 建议提前订票，日落前上去}
+      - {name: 珠江夜游, stay_min: 100, note: 从塔下码头登船}
+
+  - slug: gz-oldtown-classic
+    name: 老城经典
+    route_type: classic
+    archetype_hint: classic
+    pace: balanced
+    difficulty: moderate
+    description: 越秀山—纪念堂—北京路，广州最有历史密度的一条线。
+    recommended_start_time: "09:00"
+    recommended_end_time: "18:00"
+    best_for: [第一次来, 文化, 历史]
+    stops:
+      - {name: 中山纪念堂, stay_min: 60, note: 建筑本身值得看}
+      - {name: 越秀公园, stay_min: 120, note: 五羊石像与城墙}
+      - {name: 广州博物馆, stay_min: 90, note: 镇海楼俯瞰老城}
+      - {name: 北京路步行街, stay_min: 120, note: 千年古道遗址就在路面下}
+
+  - slug: gz-museum-day
+    name: 博物馆一日
+    route_type: museum
+    archetype_hint: classic
+    pace: balanced
+    difficulty: easy
+    description: 三馆连看，全程室内，是雨天的最佳答案。
+    recommended_start_time: "09:30"
+    recommended_end_time: "18:00"
+    best_for: [雨天, 博物馆, 亲子]
+    stops:
+      - {name: 广东省博物馆, stay_min: 150, note: 免费但需预约，先约再出门}
+      - {name: 广州艺术博物院, stay_min: 90, note: 建筑与展览都值得看}
+      - {name: 花城广场, stay_min: 60, note: 就在博物馆旁，可作休息与散步}
+
+  - slug: gz-nanyuewang-oldcity
+    name: 南越王与古城
+    route_type: culture
+    archetype_hint: classic
+    pace: balanced
+    difficulty: easy
+    description: 从南越王墓到北京路，一条线看懂广州两千年。
+    recommended_start_time: "09:30"
+    recommended_end_time: "17:00"
+    best_for: [文化, 历史, 第一次来]
+    stops:
+      - {name: 南越王博物院, stay_min: 120, note: 丝缕玉衣是镇馆之宝}
+      - {name: 广州城隍庙, stay_min: 45, note: 就在北京路旁}
+      - {name: 北京路步行街, stay_min: 120, note: 逛街吃东西}
+
+  - slug: gz-two-temples
+    name: 古刹双寺
+    route_type: culture
+    archetype_hint: classic
+    pace: relaxed
+    difficulty: easy
+    description: 两座千年古寺 + 一座近代纪念堂，都在步行范围内。
+    recommended_start_time: "09:00"
+    recommended_end_time: "15:00"
+    best_for: [文化, 带父母, 安静]
+    stops:
+      - {name: 光孝寺, stay_min: 60, note: 广州年代最早、规模最大的佛寺}
+      - {name: 六榕寺, stay_min: 60, note: 花塔是广州地标之一}
+      - {name: 中山纪念堂, stay_min: 60, note: 步行可达}
+
+  - slug: gz-sacred-heart-bund
+    name: 石室与长堤
+    route_type: culture
+    archetype_hint: classic
+    pace: balanced
+    difficulty: easy
+    description: 哥特教堂 + 海关旧址 + 十三行，一条线读懂广州的对外贸易史。
+    recommended_start_time: "10:00"
+    recommended_end_time: "17:00"
+    best_for: [文化, 拍照, 历史]
+    stops:
+      - {name: 石室圣心大教堂, stay_min: 45, note: 全石结构，国内少见}
+      - {name: 粤海关博物馆, stay_min: 60, note: 沿江长堤的近代建筑群}
+      - {name: 十三行博物馆, stay_min: 60, note: 广州外贸史的起点}
+
+  - slug: gz-tianhe-cbd
+    name: 天河 CBD 一日
+    route_type: classic
+    archetype_hint: classic
+    pace: packed
+    difficulty: moderate
+    description: 商场 + 广场 + 广州塔，适合想感受广州现代一面的人。
+    recommended_start_time: "11:00"
+    recommended_end_time: "22:00"
+    best_for: [购物, 夜景, 第一次来]
+    stops:
+      - {name: 太古汇, stay_min: 120, note: 中午在这里解决午餐}
+      - {name: 正佳广场, stay_min: 120, note: 里面有海洋馆，带小孩可看}
+      - {name: 花城广场, stay_min: 60, note: 走到江边看日落}
+      - {name: 广州塔, stay_min: 120, note: 夜景收尾}
+
+  # ══ C 主题型 ═══════════════════════════════════════════════════════════════
+  # ── 美食 ──
+  - slug: gz-food-xiguan
+    name: 西关觅食线
+    route_type: food
+    archetype_hint: themed
+    pace: balanced
+    difficulty: easy
+    description: 四家老字号小吃串成一条线，边走边吃，不用正经坐下来。
+    recommended_start_time: "10:00"
+    recommended_end_time: "17:00"
+    best_for: [美食, 情侣, 小吃]
+    stops:
+      - {name: 银记肠粉店, stay_min: 45, note: 布拉肠是招牌}
+      - {name: 顺记冰室, stay_min: 45, note: 老式冰室，椰汁芒果}
+      - {name: 陈添记, stay_min: 45, note: 鱼皮脆爽}
+      - {name: 南信牛奶甜品专家, stay_min: 45, note: 双皮奶收尾}
+
+  - slug: gz-food-dimsum
+    name: 早茶一日
+    route_type: food
+    archetype_hint: themed
+    pace: relaxed
+    difficulty: easy
+    description: 两家园林酒家早茶 + 上下九小吃，广州最经典的吃法。
+    recommended_start_time: "08:30"
+    recommended_end_time: "15:30"
+    best_for: [美食, 早茶, 带父母]
+    stops:
+      - {name: 陶陶居, stay_min: 90, note: 老字号早茶，建议开门就到}
+      - {name: 泮溪酒家, stay_min: 90, note: 园林环境，适合拍照}
+      - {name: 上下九步行街, stay_min: 90, note: 顺路再吃一轮小吃}
+
+  - slug: gz-food-shangxiajiu
+    name: 上下九觅食
+    route_type: food
+    archetype_hint: themed
+    pace: relaxed
+    difficulty: easy
+    description: 三站都在步行街上或旁边，最省体力的一条美食线。
+    recommended_start_time: "11:00"
+    recommended_end_time: "17:00"
+    best_for: [美食, 小吃, 带父母]
+    stops:
+      - {name: 广州酒家, stay_min: 90, note: 正经粤菜，适合坐下来}
+      - {name: 陈添记, stay_min: 45, note: 上下九一带的小食}
+      - {name: 百花甜品店, stay_min: 45, note: 糖水收尾}
+
+  - slug: gz-food-yuecai
+    name: 粤菜正餐线
+    route_type: food
+    archetype_hint: themed
+    pace: balanced
+    difficulty: easy
+    description: 两家正经粤菜 + 江边仓区夜景，适合想吃好也想去对地方的人。
+    recommended_start_time: "11:00"
+    recommended_end_time: "21:00"
+    best_for: [美食, 粤菜, 情侣]
+    stops:
+      - {name: 炳胜品味, stay_min: 90, note: 中午吃粤菜}
+      - {name: 惠食佳, stay_min: 90, note: 晚餐换一家口味}
+      - {name: 太古仓码头, stay_min: 90, note: 饭后江边散步}
+
+  - slug: gz-food-huangpu
+    name: 古港寻味
+    route_type: food
+    archetype_hint: themed
+    pace: relaxed
+    difficulty: easy
+    description: 黄埔古港的老村与江边，人少、便宜、有生活气。
+    recommended_start_time: "10:00"
+    recommended_end_time: "16:00"
+    best_for: [美食, 小众, 亲子]
+    stops:
+      - {name: 南海神庙, stay_min: 90, note: 同属黄埔，海上丝绸之路起点之一}
+      - {name: 黄埔古港, stay_min: 120, note: 古村与码头遗址}
+      - {name: 点都德, stay_min: 90, note: 回程顺路喝个茶}
+
+  # ── 拍照 ──
+  - slug: gz-photo-river-east
+    name: 江景拍照线
+    route_type: photo
+    archetype_hint: themed
+    pace: relaxed
+    difficulty: easy
+    description: 珠江东段三处机位，隔江拍塔，黄昏到夜间光线最好。
+    recommended_start_time: "15:00"
+    recommended_end_time: "20:30"
+    best_for: [拍照, 情侣, 夜景]
+    stops:
+      - {name: 花城广场, stay_min: 60, note: 中轴线两侧的现代建筑}
+      - {name: 海心沙亚运公园, stay_min: 90, note: 江心岛，正对小蛮腰}
+      - {name: 广州塔, stay_min: 90, note: 黄昏到夜间光线最好}
+
+  - slug: gz-photo-shamian
+    name: 沙面出片线
+    route_type: photo
+    archetype_hint: themed
+    pace: balanced
+    difficulty: easy
+    description: 三处都是取景点，半天拍完，机位集中不用跑远。
+    recommended_start_time: "10:00"
+    recommended_end_time: "17:00"
+    best_for: [拍照, 情侣, 第一次来]
+    stops:
+      - {name: 沙面, stay_min: 120, note: 建议早到，人少光好}
+      - {name: 石室圣心大教堂, stay_min: 60, note: 教堂正面与侧面都好拍}
+      - {name: 粤海关博物馆, stay_min: 60, note: 长堤建筑群}
+
+  - slug: gz-photo-sunset-warehouse
+    name: 太古仓夕阳
+    route_type: photo
+    archetype_hint: themed
+    pace: balanced
+    difficulty: easy
+    description: 从黄昏拍到夜里，红砖仓库 + 江面反光是广州最好的日落机位之一。
+    recommended_start_time: "16:00"
+    recommended_end_time: "22:00"
+    best_for: [拍照, 夜景, 情侣]
+    stops:
+      - {name: 太古仓码头, stay_min: 90, note: 日落前后是黄金时段}
+      - {name: 粤海关博物馆, stay_min: 60, note: 沿江长堤的近代建筑群}
+      - {name: 珠江夜游, stay_min: 100, note: 从江上看两岸}
+
+  - slug: gz-photo-gardens
+    name: 园林拍照线
+    route_type: photo
+    archetype_hint: themed
+    pace: balanced
+    difficulty: easy
+    description: 两座岭南名园，人少景细，适合慢慢拍。
+    recommended_start_time: "09:30"
+    recommended_end_time: "16:30"
+    best_for: [拍照, 文化, 小众]
+    stops:
+      - {name: 余荫山房, stay_min: 90, note: 广东四大名园之一}
+      - {name: 沙湾古镇, stay_min: 120, note: 同在番禺，古镇街巷很适合拍}
+      - {name: 宝墨园, stay_min: 150, note: 园林 + 砖雕 + 锦鲤}
+
+  # ── 文化 ──
+  - slug: gz-culture-lingnan
+    name: 岭南文化线
+    route_type: culture
+    archetype_hint: themed
+    pace: balanced
+    difficulty: moderate
+    description: 三处最能代表岭南的地方，适合想认真看东西的人。
+    recommended_start_time: "09:00"
+    recommended_end_time: "17:30"
+    best_for: [文化, 历史, 第一次来]
+    stops:
+      - {name: 陈家祠, stay_min: 90, note: 民间工艺}
+      - {name: 南越王博物院, stay_min: 120, note: 西汉南越国}
+      - {name: 广州博物馆, stay_min: 90, note: 镇海楼}
+
+  - slug: gz-culture-shamwan
+    name: 沙湾古镇线
+    route_type: culture
+    archetype_hint: themed
+    pace: packed
+    difficulty: moderate
+    description: 番禺方向的一日，古镇 + 名园，远离市区人流。
+    recommended_start_time: "09:00"
+    recommended_end_time: "18:00"
+    best_for: [文化, 小众, 亲子]
+    stops:
+      - {name: 沙湾古镇, stay_min: 180, note: 广东音乐发源地之一}
+      - {name: 宝墨园, stay_min: 120, note: 园林与砖雕}
+      - {name: 莲花山旅游区, stay_min: 120, note: 番禺东侧，古采石场与莲花塔}
+
+  - slug: gz-culture-religion
+    name: 宗教建筑线
+    route_type: culture
+    archetype_hint: themed
+    pace: relaxed
+    difficulty: easy
+    description: 佛寺、教堂各一处，两种建筑语言对比着看很有意思。
+    recommended_start_time: "09:30"
+    recommended_end_time: "16:00"
+    best_for: [文化, 拍照, 安静]
+    stops:
+      - {name: 六榕寺, stay_min: 60, note: 花塔}
+      - {name: 光孝寺, stay_min: 60, note: 千年古刹}
+      - {name: 石室圣心大教堂, stay_min: 45, note: 哥特式石构教堂}
+
+  - slug: gz-culture-huangpu-museum
+    name: 黄埔军校一日
+    route_type: culture
+    archetype_hint: themed
+    pace: balanced
+    difficulty: moderate
+    description: 长洲岛上的近代史现场，人少安静，适合带长辈。
+    recommended_start_time: "09:30"
+    recommended_end_time: "17:00"
+    best_for: [历史, 带父母, 小众]
+    stops:
+      - {name: 黄埔军校旧址, stay_min: 120, note: 近代军事史现场}
+      - {name: 南海神庙, stay_min: 90, note: 海上丝绸之路起点之一}
+      - {name: 黄埔古港, stay_min: 90, note: 古港码头，回程顺路}
+
+  # ── 夜景 ──
+  - slug: gz-night-river
+    name: 珠江夜景线
+    route_type: night_view
+    archetype_hint: themed
+    pace: balanced
+    difficulty: easy
+    description: 从广场走到江心岛再上船，把珠江夜景一次看全。
+    recommended_start_time: "17:00"
+    recommended_end_time: "22:30"
+    best_for: [夜景, 情侣, 第一次来]
+    stops:
+      - {name: 花城广场, stay_min: 60, note: 日落前后到}
+      - {name: 海心沙亚运公园, stay_min: 60, note: 江心岛，正对小蛮腰}
+      - {name: 珠江夜游, stay_min: 100, note: 夜游收尾}
+
+  - slug: gz-night-taigucang
+    name: 太古仓夜线
+    route_type: night_view
+    archetype_hint: themed
+    pace: balanced
+    difficulty: easy
+    description: 江边仓库灯光 + 夜游 + 回望广州塔，年轻人的夜。
+    recommended_start_time: "18:00"
+    recommended_end_time: "23:00"
+    best_for: [夜景, 情侣, 朋友]
+    stops:
+      - {name: 太古仓码头, stay_min: 90, note: 仓库灯光与江边露天位}
+      - {name: 珠江夜游码头, stay_min: 90, note: 夜间游船}
+      - {name: 广州塔, stay_min: 90, note: 仰视小蛮腰}
+
+  # ── 亲子 ──
+  - slug: gz-family-chimelong
+    name: 长隆亲子一日
+    route_type: family
+    archetype_hint: themed
+    pace: packed
+    difficulty: hard
+    description: 全天泡在度假区，建议提前订票并留足体力。
+    recommended_start_time: "09:00"
+    recommended_end_time: "20:00"
+    best_for: [亲子, 主题乐园, 一整天]
+    stops:
+      - {name: 长隆野生动物世界, stay_min: 300, note: 建议先坐小火车}
+      - {name: 长隆欢乐世界, stay_min: 180, note: 下午转到机动游戏区}
+      - {name: 广东科学中心, stay_min: 120, note: 同在番禺，若还有体力可去（否则直接跳过）}
+
+  - slug: gz-family-science
+    name: 亲子科普线
+    route_type: family
+    archetype_hint: themed
+    pace: balanced
+    difficulty: easy
+    description: 全程室内为主，下雨天也能带娃出门。
+    recommended_start_time: "10:00"
+    recommended_end_time: "17:00"
+    best_for: [亲子, 雨天, 室内]
+    stops:
+      - {name: 广东科学中心, stay_min: 240, note: 展项多，小孩能玩一下午}
+      - {name: 岭南印象园, stay_min: 150, note: 就在大学城，步行可达}
+      - {name: 沙湾古镇, stay_min: 120, note: 若时间充裕可延长到古镇}
+
+  - slug: gz-family-zoo-mall
+    name: 动物园亲子线
+    route_type: family
+    archetype_hint: themed
+    pace: balanced
+    difficulty: moderate
+    description: 户外看动物 + 室内商场收尾，冷热都能照顾到。
+    recommended_start_time: "09:30"
+    recommended_end_time: "19:00"
+    best_for: [亲子, 户外, 雨天备选]
+    stops:
+      - {name: 广州动物园, stay_min: 180, note: 上午动物更活跃}
+      - {name: 云台花园, stay_min: 60, note: 花境与水景}
+      - {name: 正佳广场, stay_min: 120, note: 商场里有海洋馆}
+
+  # ── 情侣 ──
+  - slug: gz-couple-river-night
+    name: 情侣珠江线
+    route_type: couple
+    archetype_hint: themed
+    pace: relaxed
+    difficulty: easy
+    description: 江心岛散步 + 广场夜景 + 游船，是最省力的浪漫路线。
+    recommended_start_time: "16:30"
+    recommended_end_time: "22:00"
+    best_for: [情侣, 夜景, 慢节奏]
+    stops:
+      - {name: 海心沙亚运公园, stay_min: 90, note: 江心岛绿道}
+      - {name: 花城广场, stay_min: 60, note: 中轴线灯光}
+      - {name: 珠江夜游, stay_min: 100, note: 收尾}
+
+  - slug: gz-couple-shamian-xiguan
+    name: 情侣沙面西关线
+    route_type: couple
+    archetype_hint: themed
+    pace: balanced
+    difficulty: easy
+    description: 老街 + 骑楼 + 江边仓区，白天到夜里都好看。
+    recommended_start_time: "13:00"
+    recommended_end_time: "21:00"
+    best_for: [情侣, 拍照, 夜景]
+    stops:
+      - {name: 沙面, stay_min: 90, note: 建筑与树影}
+      - {name: 粤海关博物馆, stay_min: 60, note: 沿江长堤的近代建筑群}
+      - {name: 太古仓码头, stay_min: 90, note: 夜里的仓库灯光}
+
+  # ── CityWalk ──
+  - slug: gz-walk-xiguan-full
+    name: 西关 CityWalk
+    route_type: citywalk
+    archetype_hint: themed
+    pace: balanced
+    difficulty: moderate
+    description: 一条走完老西关的完整步行线，几乎全程走路。
+    recommended_start_time: "10:00"
+    recommended_end_time: "18:00"
+    best_for: [CityWalk, 拍照, 美食]
+    stops:
+      - {name: 荔湾博物馆, stay_min: 60, note: 起点，西关大屋}
+      - {name: 上下九步行街, stay_min: 90, note: 骑楼商业街}
+      - {name: 荔湾湖公园, stay_min: 90, note: 走到湖边歇脚}
+
+  - slug: gz-walk-liwan-full
+    name: 荔湾 CityWalk
+    route_type: citywalk
+    archetype_hint: themed
+    pace: balanced
+    difficulty: moderate
+    description: 从陈家祠一路走到湖边再到骑楼街，西关片区几乎全程步行可串。
+    recommended_start_time: "10:00"
+    recommended_end_time: "17:00"
+    best_for: [CityWalk, 拍照, 美食]
+    stops:
+      - {name: 陈家祠, stay_min: 90, note: 起点，岭南工艺}
+      - {name: 荔湾湖公园, stay_min: 90, note: 湖边歇脚}
+      - {name: 上下九步行街, stay_min: 90, note: 骑楼街收尾}
+
+  # ── 自然 ──
+  - slug: gz-nature-baiyun
+    name: 白云山登高
+    route_type: nature
+    archetype_hint: themed
+    pace: packed
+    difficulty: hard
+    description: 广州市区最能出汗的一条线，山顶可俯瞰全城。
+    recommended_start_time: "08:00"
+    recommended_end_time: "15:00"
+    best_for: [自然, 户外, 运动]
+    stops:
+      - {name: 白云山, stay_min: 240, note: 建议从云台花园一侧上山}
+      - {name: 云台花园, stay_min: 90, note: 下山后顺路看花境}
+      - {name: 越秀公园, stay_min: 90, note: 继续往南，山脚就是市区公园}
+
+  - slug: gz-nature-city-parks
+    name: 市区公园半日
+    route_type: nature
+    archetype_hint: themed
+    pace: relaxed
+    difficulty: easy
+    description: 半天绿地 + 半天商场，都在市中心，适合天气好的时候。
+    recommended_start_time: "10:00"
+    recommended_end_time: "17:00"
+    best_for: [自然, 亲子, 拍照]
+    stops:
+      - {name: 越秀公园, stay_min: 120, note: 树荫多，走起来不晒}
+      - {name: 天河城, stay_min: 120, note: 回市区吃饭逛街}
+      - {name: 花城广场, stay_min: 60, note: 傍晚顺路看中轴线}
+
+  # ── 博物馆 / 购物 ──
+  - slug: gz-museum-xiguan-three
+    name: 西关三馆
+    route_type: museum
+    archetype_hint: themed
+    pace: balanced
+    difficulty: easy
+    description: 三座小而精的博物馆，都在老城步行可达范围内。
+    recommended_start_time: "10:00"
+    recommended_end_time: "17:00"
+    best_for: [博物馆, 雨天, 文化]
+    stops:
+      - {name: 荔湾博物馆, stay_min: 60, note: 西关大屋}
+      - {name: 粤海关博物馆, stay_min: 60, note: 近代海关}
+      - {name: 十三行博物馆, stay_min: 60, note: 外贸史}
+
+  - slug: gz-shop-tianhe
+    name: 天河购物线
+    route_type: shopping
+    archetype_hint: themed
+    pace: balanced
+    difficulty: easy
+    description: 三个商场连逛，全部地铁直达，雨天首选。
+    recommended_start_time: "11:00"
+    recommended_end_time: "20:00"
+    best_for: [购物, 雨天, 室内]
+    stops:
+      - {name: 天河城, stay_min: 120, note: 老牌主力商场}
+      - {name: 太古汇, stay_min: 120, note: 高端品牌集中}
+      - {name: 正佳广场, stay_min: 120, note: 有海洋馆与影院}
+
+  - slug: gz-classic-qingming-2day
+    name: 广州两日经典（第一天）
+    route_type: classic
+    archetype_hint: classic
+    pace: balanced
+    difficulty: moderate
+    description: 两日行程的第一天：老城文化 + 珠江夜游。
+    recommended_start_time: "09:00"
+    recommended_end_time: "21:30"
+    best_for: [两日游, 第一次来, 情侣]
+    stops:
+      - {name: 陈家祠, stay_min: 90, note: 开场}
+      - {name: 荔湾博物馆, stay_min: 60, note: 西关大屋}
+      - {name: 沙面, stay_min: 90, note: 建筑群}
+      - {name: 珠江夜游, stay_min: 100, note: 夜里收尾}
+
+  - slug: gz-classic-2day-second
+    name: 广州两日经典（第二天）
+    route_type: classic
+    archetype_hint: classic
+    pace: balanced
+    difficulty: moderate
+    description: 两日行程的第二天：博物馆 + 中轴线 + 广州塔。
+    recommended_start_time: "09:30"
+    recommended_end_time: "22:00"
+    best_for: [两日游, 博物馆, 夜景]
+    stops:
+      - {name: 南越王博物院, stay_min: 120, note: 上午看展}
+      - {name: 广东省博物馆, stay_min: 120, note: 转到珠江新城}
+      - {name: 花城广场, stay_min: 60, note: 中轴线}
+      - {name: 广州塔, stay_min: 120, note: 夜景收尾}

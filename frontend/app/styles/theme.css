@@ -1,0 +1,43 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   动效系统（全站统一）
+
+   只有一套入场动效：fade-rise（上移 20px + 淡入，0.8s ease-out）。
+   分级靠 delay，而不是靠不同曲线 —— 层数越少，页面越安静。
+
+   · animate-fade-rise         0s
+   · animate-fade-rise-delay   0.2s
+   · animate-fade-rise-delay-2 0.4s
+   · animate-fade-in           纯淡入（用于视频纱幕等无位移场景）
+
+   性能：只动 transform / opacity（合成层属性），不动 width / height / top / left。
+   无障碍：`fill-mode: both` 让动画开始前保持初始态；globals.css 里的
+   `prefers-reduced-motion` 规则会把时长压到 0.001ms，直接呈现终态（可见）。
+   keyframes 定义在 @theme 之外，保证它们一定被输出到产物 CSS 里。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  --animate-fade-rise: fade-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-rise-delay: fade-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+  --animate-fade-rise-delay-2: fade-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.4s both;
+  --animate-fade-in: fade-in 1.6s ease-out both;
+}
+
+@keyframes fade-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

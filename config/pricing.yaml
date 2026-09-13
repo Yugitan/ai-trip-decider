@@ -1,0 +1,135 @@
+# TripDecider 供应商单价配置
+#
+# 铁律（PRD §21.1、§30「禁止编造价格」）：
+#   - 任何单价必须来自官方价目表，并记录 sources 中的 URL 与本文件的 calibrated_at。
+#   - 未经校准的单价一律写 null 且 needs_calibration: true。
+#     null 不是"0 成本"，而是"未知"：成本统计会如实标记 pricing_calibrated=false，
+#     绝不允许把 null 当成 0 写进 cost_logs 来"美化"成本报表。
+#   - 校准流程：读官方价目页 → 填入 → 跑一次真实调用核对 token 数与账单 → 填 calibrated_at。
+#
+# 当前校准状态（2026-09-13）：
+#   ✅ search.tavily        —— 已从官方文档读取并填入
+#   ✅ llm.deepseek         —— 已从官方价目页填入（2026-09-13 实调核对：响应里的 model 为 deepseek-flash）
+#                              注意：官方价目**分高峰/低峰**，低峰是高峰的一半。
+#                              本文件按**高峰价**填（宁可多算，不把成本报低）。
+#   ❌ map.amap             —— 未取，**待校准**（当前 MAP_PROVIDER 降级为 osrm，不产生费用）
+#   ✅ map.osrm / weather   —— 免费（OSRM 公共实例与 open-meteo 均无调用费，但有合理使用限制）
+
+version: "2026.09.1"
+calibrated_at: "2026-09-10"
+currency: CNY
+
+sources:
+  deepseek_pricing: "https://api-docs.deepseek.com/quick_start/pricing"
+  tavily_credits:   "https://docs.tavily.com/documentation/api-credits"
+  amap_pricing:     "https://developer.amap.com/upgrade"
+  osrm_public:      "https://project-osrm.org/"
+  open_meteo:       "https://open-meteo.com/en/pricing"
+
+# 汇率：仅用于把美元计价的供应商换算成 CNY，便于统一成本口径
+fx:
+  usd_cny: 7.20
+  fx_updated_at: "2026-09-10"
+  fx_note: "人工维护的近似汇率，仅用于成本报表口径统一，不用于结算"
+
+llm:
+  # DeepSeek 分档：fast 用于分类/抽取/解析，strong 用于排序/叙事（见 PRD §16.1）
+  # 单位：**美元 / 百万 token**（与官方价目页口径一致，再由 fx 换算成 CNY）
+  deepseek:
+    fast:
+      # 官方价目页（2026-09-13）：deepseek-flash
+      #   高峰 $0.30 / 缓存命中 $0.006 / 输出 $1.20；低峰为半价 $0.15 / $0.003 / $0.60
+      model: deepseek-flash
+      input_per_mtok: 0.30
+      cached_input_per_mtok: 0.006
+      output_per_mtok: 1.20
+      needs_calibration: false
+      calibrated_at: "2026-09-13"
+      source: "deepseek_pricing"
+      note: "按高峰价填（保守上限）；低峰时段实际为一半。规划链路目前只用 fast 档"
+    strong:
+      # 官方价目页（2026-09-13）：deepseek-v4-pro
+      #   高峰 $1.32 / 缓存命中 $0.044 / 输出 $3.96；低峰为半价
+      model: deepseek-v4-pro
+      input_per_mtok: 1.32
+      cached_input_per_mtok: 0.044
+      output_per_mtok: 3.96
+      needs_calibration: false
+      calibrated_at: "2026-09-13"
+      source: "deepseek_pricing"
+      note: "按高峰价填；当前代码未使用 strong 档（排序/打分永远是纯函数，不调模型）"
+  # 预留：切换到其他厂商时在此新增，代码侧无需改动
+  openai:
+    fast:   { model: gpt-4o-mini,        input_per_mtok: null, output_per_mtok: null, needs_calibration: true }
+    strong: { model: gpt-4.1,            input_per_mtok: null, output_per_mtok: null, needs_calibration: true }
+  anthropic:
+    fast:   { model: claude-haiku-4-5,   input_per_mtok: null, output_per_mtok: null, needs_calibration: true }
+    strong: { model: claude-sonnet-4-5,  input_per_mtok: null, output_per_mtok: null, needs_calibration: true }
+
+search:
+  # 计价单位是 credit。Tavily 官方文档口径：
+  #   Basic Search = 1 credit/request，Advanced Search = 2 credits/request
+  #   Extract basic = 每 5 次成功抽取 1 credit；advanced = 每 5 次成功抽取 2 credits
+  #   免费额度 1000 credits/月；按量付费 $0.008/credit；月付套餐 $0.0075–$0.005/credit
+  tavily:
+    credit_price_usd: 0.008
+    free_credits_per_month: 1000
+    costs:
+      search_basic: 1
+      search_advanced: 2
+      extract_basic_per_5: 1
+      extract_advanced_per_5: 2
+    needs_calibration: false
+    calibrated_at: "2026-09-10"
+    source: "tavily_credits"
+  serper:
+    price_per_1000_queries_usd: null
+    needs_calibration: true
+  bing:
+    price_per_1000_queries_usd: null
+    needs_calibration: true
+  seed_only:
+    # 无搜索 Key 时的降级实现：只读本地知识库，零外部调用
+    price_per_query_usd: 0
+    needs_calibration: false
+
+map:
+  amap:
+    geocode_per_call: null
+    route_per_call: null
+    route_matrix_per_element: null
+    static_map_per_call: null
+    needs_calibration: true
+    note: "未取官方价目；当前 MAP_PROVIDER=auto 在无 Key 时降级到 osrm，不会产生费用"
+  osrm:
+    # 公共示例实例免费；官方明确要求合理使用，生产应自建或换商业服务
+    route_per_call: 0
+    route_matrix_per_element: 0
+    needs_calibration: false
+    note: "公共实例有公平使用限制，必须限流 + 缓存；生产前评估自建"
+  haversine:
+    # 离线估算，零成本，但结果必须标记 data_source='estimated'
+    route_per_call: 0
+    needs_calibration: false
+  tiles:
+    # OSM 标准瓦片与 MapLibre 演示样式，MVP 免费使用，须署名并遵守使用政策
+    per_call: 0
+    needs_calibration: false
+
+weather:
+  open_meteo:
+    per_call: 0
+    needs_calibration: false
+  # 注意：YAML 中裸写的 `null` 会被解析成 None 键，必须加引号（这里直接改用 disabled）
+  disabled:
+    per_call: 0
+    needs_calibration: false
+
+# ── 单次规划成本预算（用于熔断与告警，单位 CNY）─────────────────────────────
+budgets:
+  target_avg_plan_cny: 0.50        # 需求书硬指标：平均单次规划 ≤ ¥0.5
+  target_cold_plan_cny: 0.25       # 冷启动单次目标
+  target_revise_plan_cny: 0.05     # 路线修改目标
+  hard_breaker_plan_cny: 1.00      # 单次熔断上限
+  warn_plan_cny: 0.50
+  daily_global_cny: 20.00

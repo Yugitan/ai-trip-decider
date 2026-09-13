@@ -1,0 +1,45 @@
+# TripDecider 数据新鲜度（TTL）矩阵
+#
+# 原则（PRD §10）：分层缓存，不搞一刀切。变化越快 → TTL 越短 → 越倾向实时查询。
+# 单位小时。null 表示永不过期（需人工/版本变更触发失效）。
+# 关键规则：TTL 过期**不等于**必须联网。只有"影响硬约束 + 出行临近"才触发复验，
+#           否则用旧值但在 UI 标记 stale（见 refresh_policy）。
+
+version: "2026.09.1"
+
+ttl_hours:
+  city_meta: null                 # 城市基础信息
+  place_identity: 2160            # 90 天：坐标/地址/类别/名称
+  place_description: 2160         # 90 天：描述/标签/分值
+  place_price: 168                # 7 天：票价
+  place_opening_hours: 48         # 24–72h，取中值 48h：营业时间
+  place_status: 24                # 景区状态（关闭/维修）
+  place_events: 24                # 近期活动/展览
+  weather: 3                      # 天气
+  place_relation: 720             # 30 天：地点间距离/路径
+  search_result: 168              # 7 天：搜索结果
+  llm_structured: null            # 结构化 LLM 输出（分类/抽取）：prompt 版本变更即失效
+  llm_narrative: 24               # 叙事类 LLM 输出：24h
+  plan_cache: 168                 # 规划结果缓存 7 天（同时受 kb_version 约束）
+
+# ── 刷新策略：决定 TTL 过期后到底要不要花钱复验 ─────────────────────────────
+refresh_policy:
+  # 距出行日期 ≤ N 天时，才允许为"影响硬约束"的字段触发联网复验
+  travel_date_proximity_days: 7
+  hard_constraint_fields:
+    - opening_hours      # 影响 H3 到达时刻是否营业
+    - status             # 景区关闭/维修
+  # 出行日期 ≤ N 天才查天气（更早的天气没有决策价值，浪费钱）
+  weather_proximity_days: 7
+  # 天气取值触发的偏好调整阈值
+  weather_thresholds:
+    rain_probability: 0.60        # 高于此值提升 indoor / rainy_day 权重并给雨天备选
+    high_temp_c: 33               # 高于此值增加休息点、减少连续户外时长
+    low_temp_c: 8
+  # 允许为这些场景触发搜索的最大查询数（硬上限，见 limits.yaml 全局上限 8）
+  search_budget:
+    verify_hard_constraint: 2
+    user_named_unknown_place: 2
+    discover_more_candidates: 3
+    user_requested_latest: 3
+    arbitrate_conflict: 1

@@ -1,0 +1,47 @@
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mutmut_cache/
+
+# ── Node / Next.js ──────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# ── Playwright ──────────────────────────────────────────────────────────────
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# ── 环境与密钥（绝不入库）───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── 抓取到的原始数据（体积大，可用 make fetch-osm 重新生成）──────────────────
+backend/data/raw/*.json
+!backend/data/raw/.gitkeep
+
+# ── 本地工具的工作目录（不是项目内容）───────────────────────────────────────
+.workbuddy-ai/
+
+# ── 系统 ────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+logs/

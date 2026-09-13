@@ -1,0 +1,157 @@
+# TripDecider 阈值与限额配置
+# 所有"魔法数字"集中在此，禁止散落在业务代码里。
+
+version: "2026.09.1"
+
+planning:
+  candidate_min: 8              # 硬过滤后候选少于此值 → 放宽次级约束并显式告知用户
+  candidate_max: 80             # 候选集上限（性能保护）
+  beam_width: 12                # 束搜索宽度
+  max_depth: 8                  # 路线最大站数
+  min_route_stops: 3            # 一条"方案"至少要有几站（2 站更像"打车去一个地方"）
+  walk_preferred_max_m: 1500    # 不超过这个距离优先步行（更远则看关系表决定地铁/出租）
+  paths_per_archetype: 20       # 每个 archetype 保留的候选路径数
+  min_output_routes: 2          # 低于此值必须给出明确原因，禁止凑数
+  max_output_routes: 3
+  max_route_similarity: 0.70    # 两套方案地点集合的 Jaccard 上限，超出则视为雷同
+  anchor_pool: 8                # 参与多种子搜索的锚点数量
+  neighborhood_radius_m: 6000   # 邻域扩展半径
+  default_window:
+    start: "09:00"              # 未指定出行日期时的默认时间窗
+    end: "21:00"
+  single_leg_transit_warn_min: 60     # 单段通勤超过此值需给出理由
+  single_leg_transit_prune_min: 90    # 超过此值直接剪枝（硬约束）
+  last_entry_buffer_min: 30           # 距停止入场的安全余量
+  min_stop_duration_min: 20           # 站点最短有意义停留
+
+# ── 出行方式的耗时假设 ──────────────────────────────────────────────────────
+# 用途：当拿不到某种出行方式的真实耗时时，用「真实路网距离 × 这里的速度」推导，
+#       并把结果标记为 estimated（见 app/domain/geo.py 顶部说明）。
+# 为什么不直接用 OSRM 的时间：实测公共 OSRM 演示实例只有 car profile，
+#       请求 foot 也返回车速，直接采用会得出"步行 3 分钟"的荒谬结论。
+# 这些数字是**可审计的假设**，不是实测数据，改这里等于改估算口径。
+travel_modes:
+  walk:  {speed_kmh: 4.5,  overhead_min: 0}    # 含过街等待
+  bike:  {speed_kmh: 15.0, overhead_min: 1}    # 含取还车
+  metro: {speed_kmh: 30.0, overhead_min: 8}    # 含进出站、安检、候车（广州地铁均值偏保守）
+  bus:   {speed_kmh: 18.0, overhead_min: 6}    # 含候车与拥堵
+  taxi:  {speed_kmh: 25.0, overhead_min: 3}    # 市区含红绿灯
+  ferry: {speed_kmh: 20.0, overhead_min: 10}   # 含候船
+
+# 地点关系图的构建范围：只为"可能同一天连在一起"的地点对计算关系，
+# 避免 200 个地点两两组合产生 4 万条无意义的关系记录。
+relation_graph:
+  max_pair_distance_m: 6000        # 超过此距离不建关系（一天内不会连着走）
+  include_modes: [walk, metro, taxi]   # 需要计算耗时的出行方式
+  batch_size: 25                   # OSRM table 单次请求的最大节点数
+
+walking_caps_m:                 # 节奏 → 每日步行上限（米），与 scoring.yaml 的 hard_limit_ratio 配合
+  relaxed: 6000
+  balanced: 10000
+  packed: 15000
+
+budget:
+  default_scope: per_person
+  over_limit_ratio: 1.25        # 超出用户预算 > 25% → 硬剪枝
+  # 无地图报价时的保守估价（必须标记 estimated，不得伪装为真实票价）
+  transit_fare_cny:
+    metro_per_ride: 4.0
+    bus_per_ride: 2.0
+    taxi_base: 12.0
+    taxi_per_km: 2.6
+    ferry_per_ride: 2.0
+  meal_cost_cny:                # 餐饮人均估价（用于预算推算，标记 estimated）
+    breakfast: 30
+    lunch: 60
+    dinner: 80
+    snack: 20
+    coffee: 35
+  # 各餐次覆盖的时间窗：行程与该窗口有交集就计一次餐费。
+  # 只定义"正餐"——小吃/咖啡由站点自身价格承载，不按时间猜。
+  meal_windows:
+    breakfast: {start: "06:30", end: "10:00"}
+    lunch:     {start: "11:00", end: "14:00"}
+    dinner:    {start: "17:30", end: "20:00"}
+
+rate_limit:
+  requests_per_ip_per_minute: 30
+  cold_plans_per_ip_per_day: 5
+  cold_plans_per_session_per_day: 8
+  revisions_per_session_per_hour: 30
+  feedback_per_ip_per_hour: 10
+  body_max_bytes: 16384
+  input_free_text_max_chars: 500
+  idempotency_window_s: 10      # 同 session 同参数在此窗口内重复提交返回同一 trip
+
+cost:
+  circuit_breaker:
+    plan_total_cny: 1.00        # 超过即中止后续外部调用并降级
+    plan_search_cny: 0.30
+    plan_map_calls: 40
+    plan_llm_calls: 4
+  warn_plan_cny: 0.50
+  global_daily_cny: 20.00
+
+providers:
+  llm_timeout_s: 20
+  llm_max_retries: 1            # 校验失败重试 1 次，再失败降级到规则/模板
+  llm_max_output_tokens: 4096
+  search_timeout_s: 12
+  search_max_queries_per_plan: 8
+  search_max_results_per_query: 8
+  map_timeout_s: 8
+  map_max_calls_per_plan: 40
+  fetch_timeout_s: 5
+  fetch_max_bytes: 1048576      # 1MB，防止抓大页面
+  # SSRF 防护：抓取只允许这些域名（含子域）。空列表 = 禁止一切抓取。
+  fetch_domain_allowlist:
+    - "openstreetmap.org"
+    - "www.openstreetmap.org"
+    - "wikipedia.org"
+    - "zh.wikipedia.org"
+    - "wikidata.org"
+    - "www.wikidata.org"
+    - "gov.cn"
+    - "gz.gov.cn"
+    - "www.gz.gov.cn"
+    - "gd.gov.cn"
+    - "open-meteo.com"
+    - "api.open-meteo.com"
+    - "router.project-osrm.org"
+    - "overpass-api.de"
+
+data_quality:
+  # 知识库上线门槛（PRD §9.3）——不达标阻断发布
+  min_active_places: 200
+  min_routes: 30
+  min_sourced_ratio: 0.70       # 有 source_url 的地点占比
+  # verification_status='verified' 的占比门槛。
+  # ★ 曾设为 0.30（PRD 初稿的期望值），实测后按真实能力重新校准为 0.03 ★
+  # 实测依据（见 docs/DATA_REPORT.md）：
+  #   - OSM 里带 wikidata/wikipedia 的 POI 仅约 2.3%，而这些标签正是当前
+  #     "身份可交叉核验"的唯一判据；
+  #   - 补充来源 wikidata.org / zh.wikipedia.org 在本机网络**不可达**（已探测），
+  #     因此无法用它们提升该比例；
+  #   - 剩下的 94.7% 是 verification_status='probable'（有真实 OSM permalink 与坐标），
+  #     这对"地点库"是可接受的，但确实**不等于**关键事实已核实。
+  # 0.03 的作用是"守住不倒退"，而不是"表示达标"；真正的 30% 目标
+  # 需要引入官方名录（文旅局/景区官网）才能达成，记为长期目标。
+  min_verified_ratio: 0.03
+  # 长期目标：不阻断发布，但必须持续可见（防止把"没做到"悄悄忘掉）
+  aspirational_verified_ratio: 0.30
+  min_coord_in_bbox_ratio: 1.00 # 坐标越界必须 0
+  max_unresolved_duplicate: 0
+  max_unknown_hours_ratio: 0.60 # 营业时间未知占比（记录现状，不阻断，超限告警）
+
+feasibility:
+  # 硬约束开关（默认全开；仅用于测试注入，生产不得关闭）
+  enabled_checks:
+    - TIME_CONFLICT
+    - TRANSPORT_IMPOSSIBLE
+    - CLOSED_AT_ARRIVAL
+    - LAST_ENTRY_MISSED
+    - DUPLICATE_PLACE
+    - BACKTRACK
+    - WALKING_OVER_LIMIT
+    - BUDGET_OVER_LIMIT
+    - WINDOW_OVERFLOW

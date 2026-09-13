@@ -1,0 +1,175 @@
+# TripDecider 评分权重配置
+#
+# 铁律：
+#   1. 每组 weights 的键集合必须一致，且数值之和必须等于 1.0（容差 1e-6）。
+#      启动时由 app.core.config.validate_scoring_config() 断言，配置错误 fail-fast，禁止静默兜底。
+#   2. 权重变更会改变评分结果 —— 改完必须跑 `make test` 并更新 snapshot 测试。
+#   3. 禁止把这里的逻辑搬进 prompt。LLM 只负责排序与叙事，不参与打分。
+
+version: "2026.09.1"
+
+# ── 默认权重（未指定 archetype 时使用，同时作为各 archetype 的对照基线）──────
+default_weights:
+  preference:     0.30   # 用户偏好匹配度
+  efficiency:     0.20   # 路线效率（含绕路与折返惩罚）
+  time_fit:       0.15   # 时间安排合理性（匆忙/空耗）
+  popularity:     0.10   # 地点热度
+  budget_fit:     0.10   # 预算贴合度
+  walking_fit:    0.10   # 步行承受度
+  place_relation: 0.05   # 地点组合质量
+
+# ── 方案原型（每种独立和为 1.0）─────────────────────────────────────────────
+# 偏移意图：relaxed 抬 walk/time，classic 抬 popularity/efficiency，themed 抬 preference
+archetypes:
+  relaxed:
+    label: "轻松休闲"
+    description: "低步行、慢节奏，适合不想太累的人"
+    weights:
+      preference:     0.22
+      efficiency:     0.15
+      time_fit:       0.18
+      popularity:     0.06
+      budget_fit:     0.10
+      walking_fit:    0.24
+      place_relation: 0.05
+    max_stops: 4
+    walking_cap_ratio: 0.80        # 相对用户步行上限再收紧
+    constraints: {}                # 无额外硬约束
+
+  classic:
+    label: "经典打卡"
+    description: "覆盖热门地标，第一次来的优先选择"
+    weights:
+      preference:     0.26
+      efficiency:     0.24
+      time_fit:       0.14
+      popularity:     0.18
+      budget_fit:     0.08
+      walking_fit:    0.06
+      place_relation: 0.04
+    max_stops: 6
+    walking_cap_ratio: 1.00
+    constraints:
+      # 经典型必须包含足够的高热度锚点，否则不算"经典"
+      min_popularity_anchors: 2
+      min_popularity: 0.75
+
+  themed:
+    label: "主题型"
+    description: "围绕单一偏好（美食/拍照/文化/夜景/亲子/情侣/CityWalk）深度展开"
+    weights:
+      preference:     0.42
+      efficiency:     0.16
+      time_fit:       0.12
+      popularity:     0.06
+      budget_fit:     0.10
+      walking_fit:    0.09
+      place_relation: 0.05
+    max_stops: 5
+    walking_cap_ratio: 0.95
+    constraints:
+      # 同主题地点占站点数的最低比例
+      theme_min_ratio: 0.60
+
+# ── 分项公式内部常数（改这些等于改算法语义，必须同步更新单元测试）────────────
+formulas:
+  preference:
+    mean_weight: 0.65              # PreferenceScore = 0.65·mean_pref + 0.35·coverage
+    coverage_weight: 0.35
+    coverage_min_dim_score: 0.60   # 判定"某维度被满足"的阈值
+    coverage_min_stops: 2          # 至少几个站点满足才算该维度被覆盖（防"单点拉高"）
+    unknown_score_default: 0.35    # 分值缺失时的保守默认（低于中性，避免未知地点占优）
+
+  efficiency:
+    good_travel_ratio: 0.15        # 通勤时间占比 ≤ 0.15 → 满分
+    bad_travel_ratio: 0.50         # ≥ 0.50 → 0 分
+    reversal_penalty: 0.05         # 每次方向反转扣分
+    reversal_penalty_cap: 0.20
+
+  time_fit:
+    rush_ratio: 0.70               # stay < 0.7×recommended_duration → 判定匆忙
+    rush_penalty_per_stop: 0.05
+    rush_penalty_cap: 0.30
+    idle_threshold_min: 20         # 连续两站空闲超过此时长开始扣分
+    idle_penalty_per_step: 0.03
+    idle_penalty_cap: 0.20
+
+  popularity:
+    mean_weight: 0.70
+    max_weight: 0.30               # 保留一组"亮点"，避免全平淡
+
+  budget_fit:
+    under_bonus_ratio: 0.30        # 低于预算 30% 即拿满 under_bonus
+    under_floor: 0.85
+    under_bonus: 0.15
+    over_zero_point: 0.50          # 超出用户预算达 50% → 0 分
+
+  walking_fit:
+    hard_limit_ratio: 1.20         # > cap×1.2 → 硬约束剪枝（必须与 limits.yaml 一致）
+
+  multipliers:
+    diversity:
+      enabled: true
+      max_bonus: 0.10              # 1 + max_bonus·(1 − 主类别占比)
+    weather:
+      rain_bonus: 0.10
+      heat_bonus: 0.05
+    conflict:
+      penalty_factor: 0.90         # 含 conflicting 数据的站点轻微降权
+
+# ── 用户偏好 → 地点分值字段映射 ─────────────────────────────────────────────
+# field 为 null 时，改用 categories 做类别匹配（该维度按"是否属于这些类别"给 0/1）
+preference_dimensions:
+  food:
+    label: "美食"
+    icon: "🍜"
+    field: food_score
+    aliases: ["美食", "吃", "餐厅", "小吃", "吃货", "早茶", "糖水"]
+  photo:
+    label: "拍照"
+    icon: "📸"
+    field: photo_score
+    aliases: ["拍照", "出片", "摄影", "打卡", "机位"]
+  culture:
+    label: "文化"
+    icon: "🏛"
+    field: culture_score
+    aliases: ["文化", "历史", "古迹", "人文", "建筑"]
+  night_view:
+    label: "夜景"
+    icon: "🌃"
+    field: night_view_score
+    aliases: ["夜景", "晚上", "夜游", "灯光"]
+  family:
+    label: "亲子"
+    icon: "👨‍👩‍👧"
+    field: family_score
+    aliases: ["亲子", "孩子", "小孩", "带娃", "儿童"]
+  couple:
+    label: "情侣"
+    icon: "💑"
+    field: couple_score
+    aliases: ["情侣", "约会", "浪漫", "两个人"]
+  citywalk:
+    label: "CityWalk"
+    icon: "🚶"
+    field: walkability_score
+    aliases: ["citywalk", "walk", "散步", "逛街", "慢游", "溜达"]
+  nature:
+    label: "自然"
+    icon: "🌿"
+    field: null
+    categories: ["nature"]
+    aliases: ["自然", "公园", "爬山", "户外", "绿地"]
+  shopping:
+    label: "购物"
+    icon: "🛍"
+    field: null
+    categories: ["shopping"]
+    aliases: ["购物", "商场", "买东西", "逛街购物"]
+  museum:
+    label: "博物馆"
+    icon: "🖼"
+    field: null
+    categories: ["museum"]
+    aliases: ["博物馆", "展览", "美术馆", "看展"]

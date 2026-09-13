@@ -1,0 +1,10 @@
+{
+  "selected_places": 600,
+  "route_places_included": 51,
+  "candidate_pairs": 3350,
+  "written": 3350,
+  "data_source_counts": {
+    "estimated": 3350
+  },
+  "elapsed_s": 0.7
+}

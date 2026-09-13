@@ -1,0 +1,129 @@
+@import "tailwindcss";
+@import "./styles/fonts.css";
+@import "./styles/theme.css";
+
+/* ════════════════════════════════════════════════════════════════════════════
+   TripDecider 设计系统（见 PRD §17.1）
+   调性：现代 · 旅行 · 地图感 · 轻量 · 高级 · 清晰 —— 不是后台管理系统。
+
+   v2「Cinematic Editorial」（2026-09-12）：视觉语言升级，品牌与业务不变。
+   · 字体：展示体（衬线）+ UI 体（无衬线）两层 —— 见 ./styles/fonts.css
+   · 动效：统一 fade-rise 入场 —— 见 ./styles/theme.css
+   · 层次：靠留白与发丝线（hairline）建立秩序；阴影只保留两档且克制
+   · 圆角收紧（卡片 16→14 / 控件 12→10）：避免模板式的过度圆润
+   · 品牌色板（沙色底 / 墨色字 / 青绿主色 / 珊瑚警示）保持不变
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* 主色板 */
+  --color-ink: #0b1220; /* 主文字 / 深底 */
+  --color-ink-soft: #47506b; /* 次级文字 */
+  --color-ink-faint: #8a93a8; /* 三级文字 / 占位 */
+  --color-quiet: #6f6f6f; /* 中性灰：编辑式排版里的「弱化强调」 */
+  --color-sand: #f7f4ef; /* 页面底色（暖白） */
+  --color-shell: #ffffff; /* 卡片底色 */
+  --color-teal: #0f8a80; /* 主色 */
+  --color-teal-dark: #0a6a62;
+  --color-teal-tint: #e6f4f2; /* 主色浅底 */
+  --color-coral: #ff6b4a; /* 强调 / 警示 */
+  --color-coral-tint: #ffeee9;
+  --color-sun: #ffc24b; /* 次强调 */
+  --color-river: #3b82f6; /* 地图折线 / 链接 */
+  --color-line: #e6e2da; /* 分割线 / 边框 */
+
+  /* 圆角（收紧一档，降低「模板感」） */
+  --radius-card: 14px;
+  --radius-btn: 10px;
+
+  /* 阴影：只有两档 —— 发丝级（几乎不可见）与大留白下的柔和投影 */
+  --shadow-subtle: 0 1px 2px rgba(11, 18, 32, 0.05);
+  --shadow-lift: 0 24px 60px -32px rgba(11, 18, 32, 0.35), 0 1px 2px rgba(11, 18, 32, 0.04);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  /* 页内锚点（导航 CTA → 规划卡）平滑滚动；reduced-motion 下由下方规则关闭 */
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-sand);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  /* 移动端旅游场景：保证安全区处理（刘海 / 底部手势条） */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* 一、二级标题默认走展示体（衬线）：字重保持 normal，靠字号与留白产生张力。
+   刻意**不含 h3**：h3 大量出现在数据列表（地点名、方案名）里，
+   密集信息场景下无衬线更易扫读；需要编辑感的 h3 由页面显式加 `font-display`。 */
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+::selection {
+  background-color: var(--color-teal-tint);
+  color: var(--color-teal-dark);
+}
+
+/* 数字对齐：预算/时长/距离在列表里必须竖向对齐（PRD §17.1） */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* 可见的键盘焦点环（无障碍要求，PRD §17.6）。
+   ★ 这里刻意**不设 border-radius**：outline 本身就会跟随元素的圆角，
+   而在 :focus-visible 里写死 radius 会把胶囊按钮的圆角在获得焦点的一瞬间
+   从 rounded-full 压成 6px（看得见的跳动）。 */
+:focus-visible {
+  outline: 2px solid var(--color-teal);
+  outline-offset: 2px;
+}
+
+/* 尊重用户的减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* 地图容器：给出稳定的占位尺寸，避免 CLS（PRD AC-7.5） */
+.map-canvas {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background:
+    repeating-linear-gradient(45deg, #eef2f0, #eef2f0 12px, #e7ebe9, #e7ebe9 24px);
+  border-radius: var(--radius-card);
+}
+
+/* 背景视频的电影感调色：轻微降饱和 + 提一点对比，让它成为氛围而不是主角。
+   注意这里**不做压暗**：视频的 opacity 由 HeroVideo 逐帧写行内样式（循环淡入淡出），
+   行内样式优先级更高，任何写在这里或用 class 指定的透明度都不会生效。
+   想要画面更淡，只能调 Hero 里的纱幕层。 */
+.hero-veil {
+  filter: saturate(0.95) contrast(1.05);
+  will-change: opacity;
+}
+
+@keyframes td-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.animate-stage {
+  animation: td-pulse 1.6s ease-in-out infinite;
+}

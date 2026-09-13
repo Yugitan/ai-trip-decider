@@ -1,0 +1,11 @@
+# esbuild 的可选平台包（@esbuild/darwin-arm64）已随依赖安装，
+# 不需要在安装阶段执行构建脚本 —— 显式声明以避免 pnpm 的 ignored-builds 报错。
+allowBuilds:
+  esbuild: false
+minimumReleaseAgeExclude:
+  - '@types/node@22.20.2'
+  - '@types/react-dom@19.3.0'
+  - '@types/react@19.3.0'
+  - react-dom@19.3.0
+  - react@19.3.0
+  - scheduler@0.28.0

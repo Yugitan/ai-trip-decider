@@ -1,0 +1,446 @@
+# TripDecider 知识库丰富化规则（OSM 原始数据 → places 表）
+#
+# ★ 诚实性声明（最重要的一节，实现与文档都必须遵守）★
+#   1. name / 坐标 / 类别 / opening_hours / website 等**事实字段**全部来源于 OSM 原始数据，
+#      每条都带可访问的 source_url，绝不编造。
+#   2. 分值字段（popularity/photo/food/culture/...）**不是事实**，而是
+#      「由类别 + OSM 真实标签按固定规则推导出的编辑性评分」，用于排序。
+#      推导规则全部写在本文件里，可复现、可审计、可推翻。
+#      使用默认值的条目会带 data_quality_flags 标记 'score_derived'，
+#      有人工校准的条目带 'score_curated'。
+#   3. 缺失的字段一律写 NULL 并把字段名记入 unknown_fields，**禁止填猜测值**。
+#   4. verification_status 的含义仅限「身份可信度」：
+#        verified = 有 wikidata/wikipedia 条目可交叉核验身份
+#        probable = 来自 OSM，有名称与坐标
+#        unknown  = 无可靠来源（正常流程不应产生，若产生必须复盘）
+#      **verified 不代表营业时间与价格已核实** —— 这两项绝大多数为 unknown，
+#      UI 必须按 PRD §6 FR-11 显示"信息可能变化，出发前请确认官方信息"。
+
+version: "2026.09.1"
+derivation: "category_base_plus_tag_signals_v1"
+
+# ── OSM primary_tag → places.category ──────────────────────────────────────
+# category 枚举：attraction | district | food | cafe | museum | historic | citywalk
+#                photo | nightview | family | shopping | nature | transport_hub
+tag_to_category:
+  "tourism=museum": museum
+  "tourism=gallery": museum
+  "tourism=artwork": photo
+  "tourism=attraction": attraction
+  "tourism=viewpoint": nightview
+  "tourism=theme_park": family
+  "tourism=zoo": family
+  "tourism=aquarium": family
+  "tourism=yes": attraction
+
+  "historic=memorial": historic
+  "historic=monument": historic
+  "historic=castle": historic
+  "historic=building": historic
+  "historic=ruins": historic
+  "historic=archaeological_site": historic
+  "historic=yes": historic
+
+  "amenity=restaurant": food
+  "amenity=food_court": food
+  "amenity=cafe": cafe
+  "amenity=marketplace": shopping
+  "amenity=library": attraction
+  "amenity=theatre": attraction
+  "amenity=cinema": attraction
+  "amenity=arts_centre": museum
+  "amenity=community_centre": attraction
+  "amenity=place_of_worship": historic
+  "amenity=bus_station": transport_hub
+  "amenity=ferry_terminal": transport_hub
+
+  "shop=mall": shopping
+  "shop=department_store": shopping
+
+  "leisure=park": nature
+  "leisure=garden": nature
+  "leisure=nature_reserve": nature
+
+  "natural=peak": nature
+  "natural=water": nature
+  "natural=beach": nature
+
+  "railway=station": transport_hub
+  "railway=subway_entrance": transport_hub
+
+# 未在表中命中的 primary_tag → 丢弃（不猜类别）
+fallback_category: null
+
+# ── 前缀兜底：OSM 的标签取值极其发散（historic 有 30+ 种取值）──
+# 逐个枚举既写不全也会漏（实测就漏掉了 historic=city_gate，导致南海神庙无法归类而被丢弃）。
+# 因此对这几个"语义一致"的键做前缀兜底，显式映射仍然优先。
+tag_prefix_fallbacks:
+  historic: historic    # 各种历史要素：city_gate / tomb / manor / monastery / fort ...
+  tourism: attraction   # 各种旅游要素：aquarium / camp_site / picnic_site / artwork ...
+  leisure: nature       # 各种休闲要素：playground / sports_centre / pitch ...
+  natural: nature       # 各种自然要素：cave_entrance / spring / wood ...
+  place: district       # 街区/岛屿/村落：suburb / neighbourhood / island / village / square
+
+# ── 类别覆盖规则：顺序匹配，先命中先用，作用于 tag_to_category 结果之上 ──────
+category_overrides:
+  - name: "historic 优先于 attraction"
+    when_tag_key_present: ["historic"]
+    except_categories: ["transport_hub", "museum", "food", "cafe", "shopping"]
+    set_category: historic
+  - name: "名称含街区/步行街 → district"
+    when_name_matches: ["(步行街|老街|历史街区|风情街)$"]
+    set_category: district
+  - name: "名称含咖啡 → cafe"
+    when_name_matches: ["(咖啡|coffee|Coffee|CAFE|Cafe)$"]
+    set_category: cafe
+
+# ── 分值的类别基线（0..1）──────────────────────────────────────────────────
+# 说明：基线是"该类别在通常情况下的典型值"，属于编辑性设定，不是事实。
+# 校准原则（重要）：**基线要留出上升空间**。
+# 早期版本把 food 的 food_score 基线定成 0.85，叠加 restaurant(+0.10) 与 cuisine(+0.08) 后
+# 几乎所有餐厅都是 1.0，导致"美食路线"无法区分好吃程度 —— 分值饱和等于没有分值。
+# 现在改成：基线给出"该类别的一般水平"，把高分留给真实信号（wikidata/官网/开放时间/菜系）
+# 与人工 curated 覆盖。各维度在常见标签组合下的落点大致是 0.55–0.95，保留了区分度。
+score_bases:
+  attraction:  {popularity: 0.45, photo: 0.55, food: 0.10, culture: 0.55, night_view: 0.15, family: 0.55, couple: 0.55, walkability: 0.55, rainy_day: 0.10}
+  district:    {popularity: 0.55, photo: 0.65, food: 0.50, culture: 0.60, night_view: 0.35, family: 0.45, couple: 0.60, walkability: 0.85, rainy_day: 0.10}
+  museum:      {popularity: 0.50, photo: 0.45, food: 0.10, culture: 0.72, night_view: 0.05, family: 0.55, couple: 0.45, walkability: 0.35, rainy_day: 0.90}
+  historic:    {popularity: 0.45, photo: 0.60, food: 0.10, culture: 0.60, night_view: 0.20, family: 0.45, couple: 0.55, walkability: 0.55, rainy_day: 0.25}
+  food:        {popularity: 0.45, photo: 0.40, food: 0.60, culture: 0.20, night_view: 0.15, family: 0.45, couple: 0.55, walkability: 0.50, rainy_day: 0.55}
+  cafe:        {popularity: 0.35, photo: 0.55, food: 0.45, culture: 0.15, night_view: 0.20, family: 0.25, couple: 0.62, walkability: 0.62, rainy_day: 0.70}
+  photo:       {popularity: 0.40, photo: 0.72, food: 0.05, culture: 0.25, night_view: 0.30, family: 0.30, couple: 0.65, walkability: 0.70, rainy_day: 0.05}
+  nightview:   {popularity: 0.50, photo: 0.70, food: 0.10, culture: 0.20, night_view: 0.70, family: 0.30, couple: 0.80, walkability: 0.60, rainy_day: 0.05}
+  family:      {popularity: 0.55, photo: 0.50, food: 0.30, culture: 0.25, night_view: 0.20, family: 0.65, couple: 0.30, walkability: 0.55, rainy_day: 0.40}
+  shopping:    {popularity: 0.45, photo: 0.40, food: 0.45, culture: 0.05, night_view: 0.25, family: 0.55, couple: 0.50, walkability: 0.60, rainy_day: 0.90}
+  nature:      {popularity: 0.45, photo: 0.60, food: 0.05, culture: 0.25, night_view: 0.20, family: 0.60, couple: 0.60, walkability: 0.62, rainy_day: 0.05}
+  citywalk:    {popularity: 0.40, photo: 0.60, food: 0.40, culture: 0.45, night_view: 0.25, family: 0.40, couple: 0.60, walkability: 0.80, rainy_day: 0.15}
+  transport_hub: {popularity: 0.20, photo: 0.10, food: 0.05, culture: 0.05, night_view: 0.05, family: 0.10, couple: 0.10, walkability: 0.30, rainy_day: 0.60}
+
+# ── 标签信号（每条都是可核验的 OSM 事实 → 对分值的确定性调整）───────────────
+# 条件类型：
+#   when_tag_key_present: [key,...]          键存在即命中
+#   when_tag_value_in:    {key: [v,...]}     值命中其一，"*" 表示任意值
+#   when_category_in:     [category,...]     类别命中
+#   when_name_matches:    [regex,...]        名称命中（弱启发式，仅作微调）
+# 动作：add / set_min / set_max（最后统一 clamp 到 [0,1]）
+tag_signals:
+  - id: wikidata_or_wikipedia
+    when_tag_key_present: ["wikidata", "wikipedia"]
+    # food 也加一点：有独立条目说明是有名的馆子（老字号/名店），
+    # 这对"美食路线"的排序很关键 —— 否则所有餐厅的 food_score 都挤在 0.7 附近没有区分度。
+    add: {popularity: 0.24, food: 0.06}
+    reason: "该实体在维基数据/维基百科有独立条目，说明是可交叉核验的知名实体"
+  - id: has_website
+    when_tag_key_present: ["website"]
+    add: {popularity: 0.08}
+    reason: "有官方网站，通常是正式运营场所"
+  - id: has_opening_hours
+    when_tag_key_present: ["opening_hours"]
+    add: {popularity: 0.08}
+    reason: "开放时间有人维护，通常是正式运营场所"
+  - id: has_phone
+    when_tag_key_present: ["phone"]
+    add: {popularity: 0.06}
+    reason: "登记了联系电话，信息维护度较高"
+  - id: historic_any
+    when_tag_key_present: ["historic"]
+    add: {culture: 0.18, photo: 0.08}
+    reason: "带 historic 标签，属历史类实体"
+  - id: heritage_any
+    when_tag_key_present: ["heritage"]
+    add: {culture: 0.15, popularity: 0.05}
+    reason: "带 heritage 标签，属文物/遗产保护对象"
+  - id: tourism_viewpoint
+    when_tag_value_in: {tourism: ["viewpoint"]}
+    add: {night_view: 0.20, photo: 0.15}
+    reason: "OSM 标记为观景点"
+  - id: restaurant
+    when_tag_value_in: {amenity: ["restaurant", "food_court"]}
+    add: {food: 0.10}
+    reason: "OSM 标记为餐饮场所"
+  - id: cuisine_tagged
+    when_tag_key_present: ["cuisine"]
+    add: {food: 0.08}
+    reason: "标注了菜系，说明信息较完整"
+  - id: cafe
+    when_tag_value_in: {amenity: ["cafe"]}
+    add: {couple: 0.10, walkability: 0.10}
+    reason: "咖啡馆通常适合情侣与 CityWalk 中途休息"
+  - id: park_garden
+    when_tag_value_in: {leisure: ["park", "garden", "nature_reserve"]}
+    add: {walkability: 0.20, family: 0.10, photo: 0.05}
+    reason: "OSM 标记为公园/园林"
+  - id: amusement
+    when_tag_value_in: {tourism: ["theme_park", "zoo", "aquarium"]}
+    add: {family: 0.25, popularity: 0.10}
+    reason: "OSM 标记为主题乐园/动物园/水族馆"
+  - id: worship
+    when_tag_value_in: {amenity: ["place_of_worship"]}
+    add: {culture: 0.15}
+    reason: "OSM 标记为宗教场所，多具历史建筑价值"
+  - id: wheelchair_yes
+    when_tag_value_in: {wheelchair: ["yes", "designated"]}
+    add: {family: 0.05}
+    reason: "轮椅可达，对带老人/小孩的家庭更友好"
+  - id: always_open
+    when_tag_value_in: {opening_hours: ["24/7"]}
+    add: {night_view: 0.10}
+    reason: "全天开放，夜间同样可到访"
+  - id: free_entry
+    when_tag_value_in: {fee: ["no"]}
+    add: {popularity: 0.03}
+    reason: "免费进入"
+
+# ── recommended_duration_min 的类别基线（分钟）──────────────────────────────
+duration_bases:
+  attraction: 90
+  district: 120
+  museum: 90
+  historic: 60
+  food: 60
+  cafe: 45
+  photo: 45
+  nightview: 45
+  family: 180
+  shopping: 90
+  nature: 120
+  citywalk: 90
+  transport_hub: 10
+duration_signals:
+  - when_tag_value_in: {tourism: ["theme_park", "zoo", "aquarium"]}
+    set_min: 240
+  - when_tag_key_present: ["wikidata"]
+    set_min: 60
+
+# ── indoor（雨天可用）推导：null 表示无法确定，必须留空并记 unknown ──────────
+indoor_by_category:
+  museum: true
+  shopping: true
+  cafe: true
+  food: true
+  attraction: null
+  district: null
+  historic: null
+  photo: null
+  nightview: null
+  family: null
+  nature: false
+  citywalk: false
+  transport_hub: true
+
+# ── best_time 推导（时段）──────────────────────────────────────────────────
+best_time_by_category:
+  attraction: ["morning", "afternoon"]
+  district: ["afternoon", "night"]
+  museum: ["morning", "afternoon"]
+  historic: ["morning", "afternoon"]
+  food: ["noon", "night"]
+  cafe: ["afternoon"]
+  photo: ["sunset", "afternoon"]
+  nightview: ["sunset", "night"]
+  family: ["morning", "afternoon"]
+  shopping: ["afternoon", "night"]
+  nature: ["morning"]
+  citywalk: ["afternoon", "night"]
+  transport_hub: []
+best_time_signals:
+  - when_tag_value_in: {tourism: ["viewpoint"]}
+    set: ["sunset", "night"]
+
+# ── 标签（tag）生成：类别前缀 + 信号附带 ───────────────────────────────────
+tags_by_category:
+  attraction: ["景点"]
+  district: ["街区", "CityWalk"]
+  museum: ["博物馆", "室内", "雨天备选"]
+  historic: ["历史", "人文"]
+  food: ["美食"]
+  cafe: ["咖啡", "休息"]
+  photo: ["拍照"]
+  nightview: ["夜景", "拍照"]
+  family: ["亲子"]
+  shopping: ["购物", "室内", "雨天备选"]
+  nature: ["自然", "户外"]
+  citywalk: ["CityWalk"]
+  transport_hub: ["交通"]
+tags_by_signal:
+  wikidata_or_wikipedia: ["知名"]
+  heritage_any: ["文物"]
+  wheelchair_yes: ["无障碍"]
+  free_entry: ["免费"]
+  always_open: ["夜间可去"]
+tags_from_tags:
+  # OSM 标签 → 归一化标签
+  cuisine: ["美食"]
+  religion: ["宗教建筑"]
+  historic: ["历史"]
+
+# ── 噪声过滤 ───────────────────────────────────────────────────────────────
+filters:
+  min_name_chars: 2
+
+  # 名称完全等于这些词的记录一律丢弃（城市家具，不是"地点"）
+  name_blocklist_regex:
+    - "^(公厕|公共厕所|公共洗手间|洗手间|停车场|地下停车场|P[0-9]+|非机动车停放点)$"
+    - "^(地铁站|公交站|公交车站|出租车上客点|充电站|变电站|垃圾站|垃圾中转站)$"
+
+  # ★ 通用商品连锁品牌：**整条丢弃**。
+  # 实测依据：整城抓取得到 amenity=cafe 1473 条、amenity=restaurant 2076 条，
+  # 其中瑞幸咖啡 319 家、星巴克 287 家、喜茶 96 家、蜜雪冰城 87 家……
+  # 这些分店对"去哪玩"没有任何决策价值，留着只会把候选池冲垮、
+  # 并把"200+ 地点"变成虚数。这是刻意的克减，不是数据缺失。
+  commodity_chain_regex:
+    - "(瑞幸|luckin|星巴克|starbucks|喜茶|heytea|蜜雪冰城|奈雪|霸王茶姬|茉莉奶白|coco都可|库迪|cotti|茶百道|古茗|一点点|1点点|沪上阿姨|益禾堂|manner|m ?stand|丘大叔|茶颜悦色|快乐柠檬|贡茶)"
+    - "(麦当劳|mcdonald|肯德基|kfc|汉堡王|burger king|必胜客|pizza hut|萨莉亚|味千拉面|寿司郎|探鱼|太二|胖哥俩|费大厨|木屋烧烤|遇见小面|老碗会|袁记云饺|兰州拉面|沙县小吃|海底捞|gaga|wagas|subway|赛百味|真功夫|华莱士|德克士|吉野家)"
+    - "(7-?11|全家|familymart|喜士多|美宜佳|罗森|lawson|屈臣氏|万宁|名创优品|华润万家|永辉|沃尔玛|家乐福|百佳|中国石化|中国石油|中石化|中石油|壳牌|shell|bp)"
+
+  # 这些类别不作为"游玩站点"，只作为路线的起终点锚点
+  non_stop_categories: ["transport_hub"]
+
+# ── 相关性过滤：把"生活类 POI 噪声"挡在知识库之外 ─────────────────────────
+# 原则：宁可入库更少、但每条都值得去；绝不用噪声凑数。
+# 实测依据写在每个条目后面，全部来自 data/raw/OSM_FETCH_SUMMARY.md。
+relevance:
+  # 这些 primary_tag 一律丢弃（对"去哪玩"没有决策价值）
+  drop_primary_tags:
+    - "natural=water"            # 629 条：河涌/池塘，不构成"可游玩的地点"
+    - "natural=peak"             # 939 条：广州的山头绝大多数是无名小丘
+    - "amenity=community_centre" # 178 条：社区活动中心
+    - "historic=boundary_stone"  # 界碑
+    - "historic=cannon"          # 炮台遗存，已多被"historic=fort"承载
+    - "historic=wayside_shrine"  # 路边小神龛
+    - "amenity=cinema"           # 107 条：影院，非旅行目的地
+  # 这些类别必须带"至少一个可核验信号"才保留，否则是千篇一律的城市家具
+  require_signal_categories:
+    - nature       # 1625 个 leisure=park 里多数是口袋公园；有名有姓的才值得去
+    - shopping     # 518 个 shop=mall 里有大量社区底商
+  # 具体标签级别的信号要求：同一种标签下既有地标也有噪声，只能靠"有没有信号"区分。
+  # 例：141 个 amenity=library 里绝大多数是社区分馆，但广州图书馆有 wikidata，必须留下。
+  require_signal_primary_tags:
+    - "amenity=library"
+    - "amenity=theatre"
+    # tourism=artwork：260 条里绝大多数是无名街头雕塑（粒度过细），
+    # 但广州塔这类地标在 OSM 里恰恰被标成 artwork —— 整类丢弃会让 photo 类别一个都不剩。
+    # 因此改成"有可核验信号才保留"，用信号把地标和路边雕塑区分开。
+    - "tourism=artwork"
+  # 视为"可核验信号"的标签：有其中之一说明该地点被认真维护过
+  signal_tag_keys: [wikidata, wikipedia, website, opening_hours, phone, heritage, fee, wheelchair, cuisine]
+  # 品牌分店上限：同城同名地点超过此数量时，只保留"信号最强 + 最靠近市中心"的前 N 个。
+  # 理由：一天行程最多去 1–2 家同品牌门店，保留 3 家足够覆盖不同区域，
+  # 再多只是给数据库灌水。老字号（点都德、陶陶居）同样受此约束，因为它们的
+  # 旅行价值在"品牌"而不在"第 8 家分店"。
+  max_branches_per_brand: 3
+  # 同一地点被重复测绘（node + way 各一份）时的合并半径：同名且距离小于此值视为同一实体
+  duplicate_merge_radius_m: 150
+  # ★ 人工整理地点的保护机制 ★
+  # data/curated/guangzhou_places.yaml 里的名称与别名一律**跳过上面所有相关性过滤**。
+  # 原因（实测教训）：机器规则必然有误伤 —— 广州塔在 OSM 里标的是 tourism=artwork、
+  # 白云山标的是 natural=peak、南海神庙标的是 historic=city_gate，全被规则挡在门外。
+  # 人工已确认"这些是真实目的地"，就该让机器规则让路，而不是反过来丢掉地标。
+  protect_curated_names: true
+
+# ── verification_status 判定 ───────────────────────────────────────────────
+verification:
+  # 有维基数据/维基百科条目 → 身份可交叉核验
+  verified_when_tag_key_present: ["wikidata", "wikipedia"]
+  # 否则，来自 OSM 且有名称与坐标 → probable
+  default: probable
+  unknown_value: unknown
+
+# ── unknown_fields 判定 ────────────────────────────────────────────────────
+unknown_field_rules:
+  opening_hours: "when_osm_tag_absent"     # OSM 无 opening_hours → 记 unknown
+  price_min: "always_unless_fee_tag"       # 绝大多数无价格 → unknown
+  price_max: "always_unless_fee_tag"
+  best_season: "always"                    # 季节性无可靠来源 → 留空
+  crowd_level: "always"
+  reservation_required: "always"
+
+# ── 行政归属判定（★ 修掉一个真实的数据 bug ★）──────────────────────────────
+# 问题：整城抓取用的是**矩形 bbox**，而广州的形状不规则，矩形四角切进了
+#       深圳、东莞、佛山、中山。结果「深圳野生动物园」「东莞博物馆」这类地点
+#       进了广州知识库，还因为热度分值高排到了列表最前面。
+# 精确修法：用 OSM 的广州市行政边界做点面判定。但 Overpass 当前不可用（504），
+#       拿不到边界多边形，所以先用**可核验的证据**做保守过滤：
+#         1. OSM 的 addr:city / addr:district 直接写明了城市或区名（实测 528 条有值，
+#            其中 13 条明确写了深圳/东莞/佛山/江门的区）；
+#         2. 名称以邻市名开头（东莞/佛山/深圳/中山市）—— 但**不能**匹配裸的「中山」，
+#            因为「中山纪念堂」「国立中山大学旧址」「孙中山文献馆」都是广州本地地标。
+# 残留局限：既无地址标签、名称也不含邻市名的越界地点仍会留下。已记入 DATA_REPORT。
+admin:
+  # 广州的市名与 11 个行政区（含常用简称），用于"确认属于广州"
+  city_names: [广州, 广州市, Guangzhou, guangzhou]
+  districts:
+    - 越秀区
+    - 海珠区
+    - 荔湾区
+    - 天河区
+    - 白云区
+    - 黄埔区
+    - 番禺区
+    - 花都区
+    - 南沙区
+    - 从化区
+    - 增城区
+  # 邻市的区/街道级名称（出现在 addr:district 里就说明该地点不在广州）
+  neighbor_districts:
+    - 南山区
+    - 福田区
+    - 宝安区
+    - 龙华区
+    - 光明区
+    - 罗湖区
+    - 盐田区
+    - 龙岗区
+    - 坪山区
+    - 禅城区
+    - 南海区
+    - 顺德区
+    - 三水区
+    - 高明区
+    - 蓬江区
+    - 江海区
+    - 新会区
+    - 香洲区
+    - 金湾区
+    - 斗门区
+    - 惠城区
+    - 惠阳区
+    - 端州区
+    - 清城区
+    - 清新区
+    - Nanshan
+    - Nanhai
+    - Shenzhen
+  # 邻市市名（出现在 addr:city 里就说明该地点不在广州）
+  neighbor_cities:
+    - 深圳
+    - 深圳市
+    - 东莞
+    - 东莞市
+    - 佛山
+    - 佛山市
+    - 中山市
+    - 珠海
+    - 珠海市
+    - 江门
+    - 江门市
+    - 肇庆
+    - 肇庆市
+    - 惠州
+    - 惠州市
+    - 清远
+    - 清远市
+    - 韶关
+    - 韶关市
+  # 名称前缀判定（只放**不会误伤**的：不含裸「中山」）
+  neighbor_name_prefixes:
+    - 东莞
+    - 佛山
+    - 深圳
+    - 中山市
+
+# ── 坐标合理性 ─────────────────────────────────────────────────────────────
+coord:
+  bbox: {min_lat: 22.50, max_lat: 23.95, min_lng: 112.90, max_lng: 114.05}
+  # 中心点用于计算距离与"是否在市区"
+  city_center: {lat: 23.1291, lng: 113.2644}   # 广州市中心（越秀/天河一带）

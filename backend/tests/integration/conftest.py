@@ -1,0 +1,181 @@
+"""集成测试夹具：真实数据库 + 真实 ASGI 应用。
+
+★ 关键设计：整个集成测试套件跑在**测试库**上，而不是开发库 ★
+    早期版本里 `client` 夹具用的是 Settings 的默认 DATABASE_URL（开发库），
+    于是"知识库集成测试"在一个空库上全部 skip —— 测试通过率很好看，但什么都没验证。
+    现在在导入应用模块之前就把 DATABASE_URL 指向测试库，并在会话开始时把知识库
+    灌进去（复用真实的建库脚本，幂等）。这样断言的才是真实数据。
+
+数据准备顺序：
+    1. 迁移测试库到 head
+    2. 若测试库还没有知识库（places < 200），跑一次真实建库流程
+    3. 缺少原始数据时给出可执行的修复指令（而不是静默跳过）
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
+
+import pytest
+from alembic.config import Config as AlembicConfig
+from fastapi.testclient import TestClient
+
+from alembic import command
+from app.core.paths import backend_dir
+
+# ── 第一步：在任何应用模块读取配置之前，把 DATABASE_URL 指向测试库 ─────────────
+
+
+def _resolve_test_database_url() -> str:
+    """从 .env 推导测试库 URL（此时 Settings 还没被改写过）。"""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.test_database_url:
+        return settings.test_database_url
+    head, _, _ = settings.database_url.rpartition("/")
+    return f"{head}/tripdecider_test"
+
+
+TEST_DATABASE_URL = _resolve_test_database_url()
+os.environ["DATABASE_URL"] = TEST_DATABASE_URL
+
+# ── 第一步之二：集成测试**不碰真实 LLM** ──────────────────────────────────
+# 开发机的 .env 里可能配了 DEEPSEEK_API_KEY。不管它的话，凡是带 free_text 的规划
+# 用例都会真的去调模型：慢、要花钱，而且结果会随模型版本漂移 ——
+# 测试就不再是可重复的。这里把 Provider 压成 NullLlmProvider，
+# 规划路径随之降级到规则引擎（这正是“无 Key 也能跑”那条硬要求的日常回归）。
+# 需要真实调用的用例（tests/integration/test_llm_live.py）自己直接构造 Provider，
+# 不受这一行影响。
+if os.environ.get("TRIPDECIDER_TEST_LIVE_LLM") != "1":
+    os.environ["LLM_PROVIDER"] = "disabled"
+
+from app.core.config import clear_config_cache  # noqa: E402
+
+clear_config_cache()  # 让后续 get_settings() 读到测试库
+
+
+def test_database_url() -> str:
+    """测试库连接串（供需要用原生引擎的用例复用）。"""
+    return TEST_DATABASE_URL
+
+
+# ── 第二步：迁移 + 建库 ─────────────────────────────────────────────────────
+
+
+def _run_alembic_upgrade() -> None:
+    cfg = AlembicConfig(str(Path(backend_dir()) / "alembic.ini"))
+    cfg.set_main_option("script_location", str(Path(backend_dir()) / "alembic"))
+    previous = os.environ.get("ALEMBIC_DATABASE_URL")
+    os.environ["ALEMBIC_DATABASE_URL"] = TEST_DATABASE_URL
+    try:
+        command.upgrade(cfg, "head")
+    except Exception as exc:
+        pytest.fail(
+            f"无法连接或迁移测试库 {TEST_DATABASE_URL}：{exc}\n"
+            "请先执行：\n"
+            "  make db-create\n"
+            "  make migrate-test\n"
+            "（本机 Postgres 未启动时：brew services start postgresql@16）"
+        )
+    finally:
+        if previous is None:
+            os.environ.pop("ALEMBIC_DATABASE_URL", None)
+        else:
+            os.environ["ALEMBIC_DATABASE_URL"] = previous
+
+
+async def _place_count() -> int:
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(TEST_DATABASE_URL)
+    try:
+        async with engine.connect() as conn:
+            try:
+                return int((await conn.execute(text("SELECT count(*) FROM places"))).scalar_one())
+            except Exception:
+                return -1  # 表还不存在
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _prepared_test_db() -> Iterator[None]:
+    """迁移测试库；若知识库为空则灌入（复用真实建库脚本，保证测的是真实数据）。"""
+    _run_alembic_upgrade()
+
+    from app.core.paths import raw_data_dir
+
+    if not list(raw_data_dir().glob("osm_guangzhou_*.json")):
+        pytest.fail(
+            "缺少原始 OSM 数据，无法在真实知识库上做集成测试。\n"
+            "请先运行：make fetch-osm && make seed\n"
+            "（这里刻意不 skip：跳过会让集成测试变成空跑，看起来通过其实什么都没验证。）"
+        )
+
+    async def _ensure_knowledge_base() -> None:
+        """在同一事件循环内完成"检查 → 建库 → 计算关系图 → 释放引擎"。
+
+        为什么必须放在一个 loop 里：SQLAlchemy 的异步引擎会把连接绑定到创建它的
+        事件循环。早期实现在这里用 `asyncio.run()` 建库、随后 TestClient 又在自己的
+        循环里复用同一个缓存的引擎，于是 /health 的数据库探针抛出
+        "Event loop is closed"。修复方式是建库后立刻释放引擎缓存。
+        """
+        from app.db.session import dispose_engines
+
+        # ★ 每次都重建，而不是"地点少于 200 才建" ★
+        # 早期实现只在库为空时建库，于是数据规则改动后，集成测试会继续跑在
+        # **过期数据**上并通过 —— 比如"矩形 bbox 切进邻市"这个 bug 修完之后，
+        # 测试库仍留着 2000 条深圳/东莞地点，测试照样全绿。
+        # 建库约 12 秒，用这点时间换取"测的一定是当前数据"是划算的。
+        need_seed = True
+        if need_seed:
+            from scripts.seed_guangzhou import run as seed_run
+
+            print("\n[集成测试] 测试库知识库为空，正在建库（复用 scripts/seed_guangzhou.py）…")
+            try:
+                exit_code = await seed_run(dry_run=False, force=True)
+            except SystemExit as exc:  # 建库脚本用 SystemExit 报告前置条件缺失
+                await dispose_engines()
+                pytest.fail(f"建库失败，本轮集成测试中止：{exc}")
+            if exit_code != 0:
+                await dispose_engines()
+                pytest.fail("建库脚本返回非零退出码，集成测试无法在可信数据上运行")
+
+        # 关系图：离线模式足够（1 秒），确保相关断言不会因为"没算过"而被跳过
+        from scripts.compute_relations import build_relations
+
+        await build_relations(use_osrm=False, max_places=400, neighbors=8)
+
+        # ★ 关键：释放绑定到本事件循环的引擎，避免 TestClient 在自己的循环里复用到已关闭的连接
+        await dispose_engines()
+
+    asyncio.run(_ensure_knowledge_base())
+
+    clear_config_cache()
+    yield
+
+
+@pytest.fixture(scope="session")
+def client(_prepared_test_db: None) -> Iterator[TestClient]:
+    """真实 ASGI 应用客户端（触发 lifespan：配置 fail-fast + 日志初始化）。"""
+    from app.main import create_app
+
+    with TestClient(create_app()) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+async def db_session() -> AsyncIterator[object]:
+    """直连测试库的异步会话，用于断言 schema 与数据质量。"""
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    engine = create_async_engine(TEST_DATABASE_URL)
+    maker = async_sessionmaker(engine, expire_on_commit=False)
+    async with maker() as session:
+        yield session
+    await engine.dispose()

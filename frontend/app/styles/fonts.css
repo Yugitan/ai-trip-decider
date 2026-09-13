@@ -1,0 +1,29 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   字体系统（全站唯一出处）
+
+   两层：
+   · --font-display：展示体（衬线）—— 品牌字标、Hero 大字、区块标题、序号
+   · --font-sans   ：UI 体（无衬线）—— 导航、正文、按钮、表单、数字
+
+   ★ 为什么用系统字体栈而不是 next/font 拉取 Google Fonts ★
+   项目此前的设计决定（见 globals.css 历史注释）：本机与 CI 对部分境外域名不稳定，
+   构建与首屏不得依赖外部字体请求。Instrument Serif / Inter 因此写成**首选名**：
+   本地已安装（或将来自托管为 @font-face）时自动生效，否则逐字回退到系统字体，
+   不会因为拉不到字体而让构建失败或首屏出现字体闪烁。
+
+   ★ 中文为什么回退到宋体（衬线）★
+   展示体承担"编辑式排版"的职责。拉丁字形走 Instrument Serif，
+   中文在 macOS/iOS 走 Songti SC、Android/Linux 走 Noto Serif SC —— 这是中文
+   高端排版里成熟的衬线选择。若两者皆无（如部分 Windows），最后回退 serif。
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Noto Sans SC", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+
+  --font-display:
+    "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Palatino, "Songti SC",
+    "Noto Serif SC", "Source Han Serif SC", "Source Han Serif CN", Georgia, "Times New Roman",
+    serif;
+}

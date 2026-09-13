@@ -1,0 +1,444 @@
+# 广州知识库 —— 人工整理的地点覆盖数据（编辑性数据）
+#
+# ★ 本文件只做两件事，**不写任何事实性字段** ★
+#   1. aliases：真实存在的别名（"小蛮腰"→广州塔），用于实体匹配与用户口语输入识别。
+#      这类知识无法从 OSM 机械推导（OSM 不会告诉你"小蛮腰"就是广州塔），
+#      只能人工整理，所以它有存在价值；它是"名称知识"而不是"事实断言"。
+#   2. scores / category / recommended_duration_min / tags：**编辑性排序偏好**。
+#      覆盖 config/seed.yaml 的规则推导值，让真正的目的地排在前面。
+#      命中覆盖的地点会带 data_quality_flags=['score_curated']，与规则推导值可区分。
+#
+# ★ 明确不写的东西（写了就是编造）★
+#   opening_hours / price_min / price_max / address / 电话 / 官网
+#   —— 这些必须来自可核验来源（OSM）。本文件一个都不提供。
+#
+# 匹配规则：用 name 与 aliases 依次去 OSM 数据里找。
+#   先精确匹配归一化名称，再用 app/domain/naming.py 的相似度（阈值 0.82）模糊匹配。
+#   匹配不到的条目会在建库报告里列为 "curated_unresolved"，**不会**被凭空插入数据库。
+
+version: "2026.09.1"
+city: guangzhou
+
+places:
+  # ── 地标与夜景 ────────────────────────────────────────────────────────────
+  - name: 广州塔
+    aliases: [小蛮腰, Canton Tower, 广州塔小蛮腰]
+    category: nightview
+    recommended_duration_min: 120
+    scores: {popularity: 0.97, photo: 0.95, night_view: 0.98, couple: 0.92, family: 0.72, culture: 0.30}
+    tags: [地标, 夜景, 拍照, 情侣]
+    note: 广州第一地标，夜景最佳
+
+  - name: 珠江夜游
+    aliases: [珠江游船, 珠江夜游天字码头, 珠江夜游码头, 天字码头]
+    category: nightview
+    recommended_duration_min: 100
+    scores: {popularity: 0.90, photo: 0.88, night_view: 0.96, couple: 0.95, family: 0.65}
+    tags: [夜景, 情侣, 游船]
+
+  - name: 海心沙
+    aliases: [海心沙亚运公园]
+    category: nightview
+    recommended_duration_min: 60
+    scores: {popularity: 0.82, photo: 0.85, night_view: 0.90, couple: 0.85, walkability: 0.88}
+    tags: [夜景, 拍照, CityWalk]
+
+  - name: 花城广场
+    category: district
+    recommended_duration_min: 60
+    scores: {popularity: 0.86, photo: 0.85, night_view: 0.85, walkability: 0.90, family: 0.65}
+    tags: [夜景, 拍照, CityWalk]
+
+  # ── 历史文化 ──────────────────────────────────────────────────────────────
+  - name: 陈家祠
+    aliases: [陈氏书院, 广东民间工艺博物馆]
+    category: museum
+    recommended_duration_min: 90
+    scores: {popularity: 0.92, photo: 0.88, culture: 0.95, family: 0.62, couple: 0.60, rainy_day: 0.85}
+    tags: [历史, 人文, 拍照, 室内]
+
+  - name: 沙面
+    aliases: [沙面岛, 沙面大街]
+    category: district
+    recommended_duration_min: 120
+    scores: {popularity: 0.90, photo: 0.95, culture: 0.80, couple: 0.92, walkability: 0.95, family: 0.60}
+    tags: [拍照, CityWalk, 情侣, 历史]
+
+  - name: 永庆坊
+    aliases: [永庆坊一期, 恩宁路永庆坊, 恩宁路]
+    category: district
+    recommended_duration_min: 120
+    scores: {popularity: 0.88, photo: 0.90, culture: 0.78, couple: 0.85, walkability: 0.92, family: 0.62}
+    tags: [拍照, CityWalk, 历史, 文创]
+
+  - name: 上下九步行街
+    aliases: [上下九]
+    category: district
+    recommended_duration_min: 120
+    scores: {popularity: 0.88, photo: 0.70, food: 0.88, culture: 0.65, walkability: 0.92, family: 0.60}
+    tags: [美食, CityWalk, 购物, 历史]
+
+  - name: 北京路步行街
+    aliases: [北京路]
+    category: district
+    recommended_duration_min: 120
+    scores: {popularity: 0.90, photo: 0.78, food: 0.85, culture: 0.70, walkability: 0.92}
+    tags: [美食, 购物, CityWalk, 拍照]
+
+  - name: 中山纪念堂
+    category: historic
+    recommended_duration_min: 60
+    scores: {popularity: 0.85, photo: 0.82, culture: 0.92, family: 0.60, couple: 0.55}
+    tags: [历史, 人文, 拍照]
+
+  - name: 光孝寺
+    category: historic
+    recommended_duration_min: 60
+    scores: {popularity: 0.75, photo: 0.62, culture: 0.90, couple: 0.45}
+    tags: [历史, 宗教建筑, 安静]
+
+  - name: 六榕寺
+    aliases: [六榕寺花塔]
+    category: historic
+    recommended_duration_min: 60
+    scores: {popularity: 0.78, photo: 0.78, culture: 0.88}
+    tags: [历史, 宗教建筑, 拍照]
+
+  - name: 石室圣心大教堂
+    aliases: [圣心大教堂, 石室教堂, 广州石室教堂]
+    category: historic
+    recommended_duration_min: 45
+    scores: {popularity: 0.84, photo: 0.92, culture: 0.85, couple: 0.80}
+    tags: [拍照, 历史, 宗教建筑]
+
+  - name: 广州城隍庙
+    aliases: [城隍庙]
+    category: historic
+    recommended_duration_min: 45
+    scores: {popularity: 0.68, photo: 0.62, culture: 0.82}
+    tags: [历史, 宗教建筑]
+
+  - name: 南越王博物院
+    aliases: [南越王墓博物馆, 西汉南越王博物馆, 南越王博物院王墓展区, 南越王宫博物馆]
+    category: museum
+    recommended_duration_min: 120
+    scores: {popularity: 0.84, photo: 0.55, culture: 0.96, rainy_day: 0.90, family: 0.60}
+    tags: [博物馆, 历史, 室内, 雨天备选]
+
+  - name: 广州博物馆
+    aliases: [镇海楼, 广州博物馆镇海楼展区]
+    category: museum
+    recommended_duration_min: 90
+    scores: {popularity: 0.80, photo: 0.78, culture: 0.92, rainy_day: 0.80}
+    tags: [博物馆, 历史, 室内]
+
+  - name: 广东省博物馆
+    category: museum
+    recommended_duration_min: 150
+    scores: {popularity: 0.90, photo: 0.72, culture: 0.95, family: 0.75, rainy_day: 0.95}
+    tags: [博物馆, 室内, 雨天备选, 亲子]
+
+  - name: 广州艺术博物院
+    aliases: [广州美术馆]
+    category: museum
+    recommended_duration_min: 90
+    scores: {popularity: 0.75, photo: 0.82, culture: 0.88, rainy_day: 0.88}
+    tags: [博物馆, 拍照, 室内]
+
+  - name: 广东美术馆
+    category: museum
+    recommended_duration_min: 90
+    scores: {popularity: 0.74, photo: 0.80, culture: 0.88, rainy_day: 0.88}
+    tags: [博物馆, 拍照, 室内]
+
+  - name: 粤海关博物馆
+    aliases: [粤海关大楼, 广州海关旧址, 粤海关旧址, 中国海关博物馆广州分馆]
+    category: museum
+    recommended_duration_min: 60
+    scores: {popularity: 0.72, photo: 0.80, culture: 0.85}
+    tags: [博物馆, 历史, 拍照]
+
+  - name: 十三行博物馆
+    aliases: [广州十三行博物馆]
+    category: museum
+    recommended_duration_min: 60
+    scores: {popularity: 0.70, photo: 0.58, culture: 0.86, rainy_day: 0.85}
+    tags: [博物馆, 历史, 室内]
+
+  - name: 荔湾博物馆
+    category: museum
+    recommended_duration_min: 60
+    scores: {popularity: 0.68, photo: 0.70, culture: 0.82}
+    tags: [博物馆, 历史]
+
+  - name: 黄埔军校旧址
+    aliases: [黄埔军校旧址纪念馆]
+    category: historic
+    recommended_duration_min: 120
+    scores: {popularity: 0.78, photo: 0.65, culture: 0.90}
+    tags: [历史, 人文]
+
+  - name: 南海神庙
+    category: historic
+    recommended_duration_min: 90
+    scores: {popularity: 0.72, photo: 0.68, culture: 0.90}
+    tags: [历史, 宗教建筑]
+
+  - name: 沙湾古镇
+    category: historic
+    recommended_duration_min: 180
+    scores: {popularity: 0.80, photo: 0.82, culture: 0.88, food: 0.75, family: 0.70}
+    tags: [历史, 美食, 拍照, 亲子]
+
+  - name: 余荫山房
+    category: historic
+    recommended_duration_min: 90
+    scores: {popularity: 0.72, photo: 0.85, culture: 0.88}
+    tags: [历史, 拍照, 园林]
+
+  - name: 黄埔古港
+    aliases: [黄埔古村]
+    category: historic
+    recommended_duration_min: 120
+    scores: {popularity: 0.70, photo: 0.72, culture: 0.82, food: 0.80}
+    tags: [历史, 美食, CityWalk]
+
+  - name: 广州农民运动讲习所旧址
+    aliases: [农讲所, 毛泽东同志主办农民运动讲习所旧址, 农民运动讲习所]
+    category: museum
+    recommended_duration_min: 60
+    scores: {popularity: 0.70, photo: 0.62, culture: 0.86, rainy_day: 0.80}
+    tags: [历史, 博物馆, 室内]
+
+  - name: 广州起义烈士陵园
+    category: historic
+    recommended_duration_min: 60
+    scores: {popularity: 0.65, photo: 0.60, culture: 0.80}
+    tags: [历史, 安静, 公园]
+
+  # ── 自然与休闲 ────────────────────────────────────────────────────────────
+  - name: 越秀公园
+    category: nature
+    recommended_duration_min: 120
+    scores: {popularity: 0.85, photo: 0.78, culture: 0.70, family: 0.82, walkability: 0.90}
+    tags: [公园, 自然, 亲子, CityWalk]
+
+  - name: 白云山
+    aliases: [白云山风景区, 白云山风景名胜区]
+    category: nature
+    recommended_duration_min: 240
+    scores: {popularity: 0.88, photo: 0.85, night_view: 0.75, family: 0.78, walkability: 0.55}
+    tags: [自然, 爬山, 拍照, 户外]
+
+  - name: 二沙岛
+    aliases: [二沙岛艺术公园, 二沙头]
+    category: nature
+    recommended_duration_min: 90
+    scores: {popularity: 0.74, photo: 0.85, couple: 0.85, walkability: 0.92}
+    tags: [CityWalk, 情侣, 拍照, 自然]
+
+  - name: 海珠湖公园
+    aliases: [海珠湖]
+    category: nature
+    recommended_duration_min: 120
+    scores: {popularity: 0.76, photo: 0.82, family: 0.80, walkability: 0.88}
+    tags: [公园, 自然, 亲子, 拍照]
+
+  - name: 华南植物园
+    aliases: [中国科学院华南植物园, 植物园, 华南植物园]
+    category: nature
+    recommended_duration_min: 180
+    scores: {popularity: 0.78, photo: 0.85, family: 0.85, walkability: 0.80}
+    tags: [自然, 亲子, 拍照, 户外]
+
+  - name: 云台花园
+    category: nature
+    recommended_duration_min: 90
+    scores: {popularity: 0.72, photo: 0.85, family: 0.70, couple: 0.75}
+    tags: [园林, 拍照, 自然]
+
+  - name: 流花湖公园
+    category: nature
+    recommended_duration_min: 90
+    scores: {popularity: 0.70, photo: 0.72, family: 0.75, walkability: 0.85}
+    tags: [公园, 亲子, 自然]
+
+  - name: 荔湾湖公园
+    category: nature
+    recommended_duration_min: 90
+    scores: {popularity: 0.72, photo: 0.75, family: 0.72, walkability: 0.88}
+    tags: [公园, 自然, CityWalk]
+
+  - name: 大夫山森林公园
+    category: nature
+    recommended_duration_min: 180
+    scores: {popularity: 0.68, photo: 0.72, family: 0.80, walkability: 0.70}
+    tags: [自然, 户外, 亲子]
+
+  - name: 莲花山旅游区
+    aliases: [莲花山]
+    category: nature
+    recommended_duration_min: 180
+    scores: {popularity: 0.70, photo: 0.78, culture: 0.70, family: 0.70}
+    tags: [自然, 历史, 户外]
+
+  # ── 亲子 ──────────────────────────────────────────────────────────────────
+  - name: 广州动物园
+    category: family
+    recommended_duration_min: 240
+    scores: {popularity: 0.82, photo: 0.65, family: 0.95}
+    tags: [亲子, 户外]
+
+  - name: 长隆野生动物世界
+    aliases: [长隆野生动物园]
+    category: family
+    recommended_duration_min: 360
+    scores: {popularity: 0.92, photo: 0.75, family: 0.98}
+    tags: [亲子, 户外, 主题乐园]
+
+  - name: 长隆欢乐世界
+    category: family
+    recommended_duration_min: 360
+    scores: {popularity: 0.88, photo: 0.70, family: 0.92, couple: 0.60}
+    tags: [亲子, 主题乐园]
+
+  - name: 广东科学中心
+    category: family
+    recommended_duration_min: 240
+    scores: {popularity: 0.80, photo: 0.60, family: 0.95, rainy_day: 0.95}
+    tags: [亲子, 室内, 雨天备选]
+
+  # ── 购物与商圈 ────────────────────────────────────────────────────────────
+  - name: 天河城
+    aliases: [天河城购物中心]
+    category: shopping
+    recommended_duration_min: 120
+    scores: {popularity: 0.76, photo: 0.50, family: 0.70, rainy_day: 0.92}
+    tags: [购物, 室内, 雨天备选]
+
+  - name: 太古汇
+    aliases: [广州太古汇, Taikoo Hui]
+    category: shopping
+    recommended_duration_min: 120
+    scores: {popularity: 0.78, photo: 0.70, couple: 0.70, rainy_day: 0.92}
+    tags: [购物, 室内, 拍照]
+
+  - name: 正佳广场
+    aliases: [正佳广场极地海洋世界]
+    category: shopping
+    recommended_duration_min: 120
+    scores: {popularity: 0.80, photo: 0.62, family: 0.88, rainy_day: 0.92}
+    tags: [购物, 亲子, 室内, 雨天备选]
+
+  # ── 街区 / CityWalk / 拍照 ────────────────────────────────────────────────
+  - name: 东山口
+    aliases: [东山口新河浦, 新河浦, 东山, 东山洋楼]
+    category: citywalk
+    recommended_duration_min: 120
+    scores: {popularity: 0.84, photo: 0.92, culture: 0.78, couple: 0.88, walkability: 0.95}
+    tags: [拍照, CityWalk, 情侣, 咖啡]
+
+  - name: 太古仓
+    aliases: [太古仓码头]
+    category: nightview
+    recommended_duration_min: 90
+    scores: {popularity: 0.78, photo: 0.88, night_view: 0.85, couple: 0.88}
+    tags: [夜景, 拍照, 情侣]
+
+  - name: 琶醍
+    aliases: [珠江琶醍, 琶醍啤酒文化创意艺术区, 啤酒厂]
+    category: nightview
+    recommended_duration_min: 90
+    scores: {popularity: 0.76, photo: 0.82, night_view: 0.88, couple: 0.85}
+    tags: [夜景, 拍照, 酒吧]
+
+  - name: 小洲村
+    category: citywalk
+    recommended_duration_min: 150
+    scores: {popularity: 0.66, photo: 0.82, culture: 0.72, couple: 0.72, walkability: 0.88}
+    tags: [CityWalk, 拍照, 文艺]
+
+  - name: 岭南印象园
+    category: attraction
+    recommended_duration_min: 150
+    scores: {popularity: 0.72, photo: 0.80, culture: 0.82, family: 0.78}
+    tags: [文化, 亲子, 拍照]
+
+  - name: 宝墨园
+    category: attraction
+    recommended_duration_min: 150
+    scores: {popularity: 0.70, photo: 0.85, culture: 0.82, family: 0.75}
+    tags: [园林, 拍照, 历史]
+
+  # ── 美食：老字号与名店 ────────────────────────────────────────────────────
+  - name: 陶陶居
+    aliases: [陶陶居酒家]
+    category: food
+    recommended_duration_min: 90
+    scores: {popularity: 0.90, food: 0.95, culture: 0.70, family: 0.70}
+    tags: [美食, 早茶, 老字号]
+
+  - name: 广州酒家
+    category: food
+    recommended_duration_min: 90
+    scores: {popularity: 0.88, food: 0.92, culture: 0.68, family: 0.72}
+    tags: [美食, 早茶, 老字号]
+
+  - name: 点都德
+    category: food
+    recommended_duration_min: 90
+    scores: {popularity: 0.87, food: 0.90, family: 0.72}
+    tags: [美食, 早茶]
+
+  - name: 泮溪酒家
+    category: food
+    recommended_duration_min: 90
+    scores: {popularity: 0.82, food: 0.90, culture: 0.70, photo: 0.72}
+    tags: [美食, 早茶, 老字号, 园林]
+
+  - name: 炳胜品味
+    aliases: [炳胜]
+    category: food
+    recommended_duration_min: 90
+    scores: {popularity: 0.84, food: 0.92}
+    tags: [美食, 粤菜]
+
+  - name: 惠食佳
+    category: food
+    recommended_duration_min: 90
+    scores: {popularity: 0.80, food: 0.92}
+    tags: [美食, 粤菜]
+
+  - name: 银记肠粉店
+    aliases: [银记肠粉]
+    category: food
+    recommended_duration_min: 45
+    scores: {popularity: 0.80, food: 0.88}
+    tags: [美食, 小吃, 老字号]
+
+  - name: 陈添记
+    aliases: [陈添记鱼皮]
+    category: food
+    recommended_duration_min: 45
+    scores: {popularity: 0.78, food: 0.88}
+    tags: [美食, 小吃, 老字号]
+
+  - name: 顺记冰室
+    category: food
+    recommended_duration_min: 45
+    scores: {popularity: 0.76, food: 0.85}
+    tags: [美食, 甜品, 老字号]
+
+  - name: 南信牛奶甜品专家
+    aliases: [南信双皮奶, 南信]
+    category: food
+    recommended_duration_min: 45
+    scores: {popularity: 0.78, food: 0.88}
+    tags: [美食, 甜品, 老字号]
+
+  - name: 百花甜品店
+    aliases: [百花甜品]
+    category: food
+    recommended_duration_min: 45
+    scores: {popularity: 0.74, food: 0.86}
+    tags: [美食, 甜品]
