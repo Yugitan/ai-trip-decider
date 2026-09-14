@@ -9,9 +9,12 @@
 > `make validate`（2026-09-13 修复 Makefile 后实跑，exit=0）、
 > `make check`（2026-09-13 实跑，exit=0）、`/api/v1/dev/*` 与 `/dev` 页面（开发面板）。
 >
+> **2026-09-14 追加实跑**：`make cost`（首次跑通，产物 `docs/COST_REPORT.md`）、`make check`（exit=0）、
+> `git push` 三条分支（见 §11）。
+>
 > **未实测**（文中数字来自 `README.md`/`Makefile`）：`make setup`（会装依赖，没有重跑）、
 > `make fetch-osm`（需网络，约 9 分钟）、
-> `make relations` / `make cost` / `make todo` / `make security`。
+> `make relations` / `make todo` / `make security`。
 
 ---
 
@@ -535,4 +538,34 @@ ai-trip-decider/
 └── frontend/                Next.js App Router（app / components / lib），Vitest
     ├── app/dev/             开发设置页（仅开发构建；导航入口在生产构建里不渲染）
     └── lib/dev-api.ts       开发面板的网络客户端（Token 只存 sessionStorage）
+```
+
+---
+
+## 11. 分支与远端
+
+远端：`origin` = `https://github.com/Yugitan/ai-trip-decider`（**public**）。
+
+| 分支 | 用途 | 现状 |
+| --- | --- | --- |
+| `dev` | **主开发分支**（默认分支，所有提交先进这里） | `413c9fc` |
+| `test` | 联调 / 验收分支：从 `dev` 提升，供测试环境拉取 | 与 `dev` 同点 |
+| `prod` | 发布分支：只在验收通过后从 `test` 快进 | 与 `dev` 同点 |
+
+三条分支目前指向同一个提交（首次上传，还没有需要区分的版本差）。
+日常只推 `dev`：
+
+```bash
+git push origin dev                     # 只推开发分支
+git push origin dev:test                # 验收：把 dev 快进到 test
+git push origin test:prod               # 发布：把 test 快进到 prod
+```
+
+约定：
+
+- **`test` / `prod` 只接受快进**（`--ff-only`），保证线上代码一定是验过的那个提交；
+  要回滚就用 `git push --force-with-lease` 把分支指回上一个提交，而不是在 `prod` 上打补丁。
+- **凭证不进仓库**：`.env` 已在 `.gitignore`（第 30–32 行），推送用本机钥匙串（macOS `osxkeychain`）里的凭证；
+  `.git/config` 里不带任何 token（`git remote -v` 里只有 https 地址）。
+- 提交信息用中文、写「为什么」；每个提交应当能让 `make check` 从 `exit=0` 开始。
 ```

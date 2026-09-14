@@ -483,6 +483,9 @@ React 每次都会打 `In HTML, <html> cannot be a child of <div>` —— 测试
 覆盖率：后端 **95.47%**（闸门 93%）、前端 statements **98.44%** / branches **87.19%**
 （闸门 96% / 84%）；ruff 0 问题；mypy strict 117 文件 0 错；`make check` 全绿。
 
+已上传到 `github.com/Yugitan/ai-trip-decider`：`dev`（默认）/ `test` / `prod` 三条分支，
+首次上传三者同点（`413c9fc`）；分支约定见 `RUNNING.md` §11。
+
 ### 交付
 
 | # | 任务 | 状态 | 证据 |
