@@ -50,8 +50,11 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v7
 
+      # ⚠️ setup-uv 只能固定到**精确版本**：它的移动 major 标签只到 v7，
+      # 而 release 已经到 v10.1.0 —— 写 @v10 会让整个 job 在 “Set up job”
+      # 就报 “unable to find version v10”（实测踩过）。升级时改这个完整版本号。
       - name: 安装 uv（含依赖缓存）
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           python-version: "3.12"
           enable-cache: true
