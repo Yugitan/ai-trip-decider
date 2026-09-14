@@ -1,5 +1,7 @@
 # TripDecider
 
+[![CI](https://github.com/Yugitan/ai-trip-decider/actions/workflows/ci.yml/badge.svg)](https://github.com/Yugitan/ai-trip-decider/actions/workflows/ci.yml)
+
 > **AI 旅行路线决策器** —— 我替你研究、筛选、组合并**验证**旅行路线，而不是丢给你一篇攻略。
 
 用户只回答 6 个问题（目的地 / 天数 / 人数 / 偏好 / 预算 / 节奏），产品输出 **2–3 套经过可行性校验、可比价、可继续自然语言修改**的路线方案。
@@ -309,6 +311,26 @@ Functions    : 93.75% ( 105/112 )     Lines    : 98.44%
 真实判断逻辑（空结果、故障分支、诚实性标注）**不计入统计**，数字看着很高却没有覆盖最难测的那部分。
 现在 `app` 与 `components`、`lib` 一起计入，并带 `thresholds` 闸门。
 
+### 七、CI（GitHub Actions）
+
+`.github/workflows/ci.yml`：**push 到 `dev` / `test` / `prod` 或向它们提 PR 时跑 `make check`**，
+不另写一套命令 —— 两套命令迟早会分叉，然后就是「本地绿、CI 红」，或者更糟：CI 绿而本地那条真闸门没人跑。
+
+CI 里就三步准备，全部照文档做：
+
+| 步骤 | 做法 | 为什么 |
+| --- | --- | --- |
+| 数据库 | `services: postgres:16` + `make test-setup` | 集成测试跑的是**真实 PostgreSQL**，不是 mock |
+| 环境 | `cp .env.example .env` 后只改两行数据库连接（`sed`） | 跑的就是「照快速开始做一遍」得到的配置，不是 CI 特供版 |
+| 账号 | `PG_USER=postgres` + `PGPASSWORD=postgres`（job 级 env） | `Makefile` 里 `PG_USER ?= $(shell whoami)` 是**本机开发**假设；环境变量在 make 里优先于 `?=`，所以不必为 CI 改 Makefile |
+
+两处刻意的选择：
+
+- **OSM 原始数据（约 3.8MB）入库**（`.gitignore` 里对这两份 JSON 做了例外）。集成测试缺数据是 **fail 而不是 skip**，
+  所以 CI 要么真的能重建知识库，要么就得把集成测试排除掉 —— 后者等于把「验过的提交」这句话打个折扣。
+  代价写在这里：`make fetch-osm` 重跑会改动这两份已跟踪的文件。
+- **不在 CI 里重复跑 lint / mypy / 覆盖率**：它们都是 `make check` 的一部分。重复写两遍只会多出两处会腐烂的配置。
+
 ---
 
 ## 无 Key 也能跑
@@ -387,3 +409,4 @@ docs/              生成的数据质量报告、成本报告、安全清单
 | [`TASKS.md`](./TASKS.md) | 进度明细、每轮发现的问题与修法、刻意没做的事 |
 | `docs/DATA_REPORT.md` | 知识库数据质量报告（脚本生成） |
 | `docs/COST_REPORT.md` | 单次规划成本报告（脚本生成，需先跑 `make cost`） |
+| `.github/workflows/ci.yml` | CI：与 `make check` 完全同一套命令（见 README「七、CI」） |

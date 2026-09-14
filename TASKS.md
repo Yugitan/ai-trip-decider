@@ -530,6 +530,26 @@ DeepSeek 单价校准后，两个测试的依据变了，因此**改的是断言
 
 ---
 
+## CI 接入（2026-09-14）
+
+`.github/workflows/ci.yml`：push 到 `dev` / `test` / `prod` 或向它们提 PR 时跑 **`make check`**。
+
+| # | 事 | 状态 | 说明 |
+| --- | --- | --- | --- |
+| CI-1 | GitHub Actions 跑 `make check` | ✅ | `services: postgres:16` + `make test-setup`；CI 的 `.env` 从 `.env.example` 生成，只改两行数据库连接 |
+| CI-2 | OSM 原始数据（约 3.8MB）入库 | ✅ | 集成测试缺数据是 **fail 而不是 skip**；不这么做就只能把集成测试排除在 CI 之外 |
+
+### 决策与代价
+
+- **CI 里不重复造闸门**：只有 `make check`，不再单独跑 lint / mypy / 覆盖率 ——
+  写两遍迟早分叉成「本地绿、CI 红」，或者更糟：CI 绿而本地那条真闸门没人跑。
+- **用环境变量覆盖 `PG_USER`，而不是改 Makefile**：`PG_USER ?= $(shell whoami)` 是**本机开发**假设，
+  而环境变量在 make 里优先于 `?=`；为 CI 改默认值等于让本地也多一处要维护的分支。
+- **代价写进文档，不藏起来**：`make fetch-osm` 重跑会改动两份已跟踪的 JSON
+  （数据变了应当被看见，而不是被 gitignore 藏起来）；CI 与本地唯一有意的差异就是那三行准备步骤。
+
+---
+
 ## 下一步（M5 起）
 
 | 里程碑 | 内容 | 前置条件 |

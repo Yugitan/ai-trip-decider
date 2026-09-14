@@ -157,9 +157,10 @@ make cost           # 成本报告（产物 docs/COST_REPORT.md）
 
 `make validate` 是**发布闸门**：门槛不达标会非零退出，不要用跳过它的方式"让 CI 变绿"。
 
-原始 OSM 数据（`backend/data/raw/osm_guangzhou_raw.json`）已被 gitignore，
-但本仓库当前**存在**这份文件，所以 seed 可直接跑。
-换机器或想重建原始数据时（约 9 分钟，需要网络）：
+原始 OSM 数据（`backend/data/raw/osm_guangzhou_*.json`，约 3.8MB）**已入库**
+（`.gitignore` 里对这两份 JSON 做了例外），所以 clone 下来 seed 与集成测试都能直接跑，
+不需要先跑 9 分钟的抓取。代价：`make fetch-osm` 重跑会改动这两份已跟踪的文件。
+想重建原始数据时（约 9 分钟，需要网络、且依赖 Overpass 可用）：
 
 ```bash
 make fetch-osm
@@ -569,4 +570,39 @@ git push origin test:prod               # 发布：把 test 快进到 prod
 - **凭证不进仓库**：`.env` 已在 `.gitignore`（第 30–32 行），推送用本机钥匙串（macOS `osxkeychain`）里的凭证；
   `.git/config` 里不带任何 token（`git remote -v` 里只有 https 地址）。
 - 提交信息用中文、写「为什么」；每个提交应当能让 `make check` 从 `exit=0` 开始。
+
+---
+
+## 12. CI（GitHub Actions）
+
+`.github/workflows/ci.yml`。触发：push 到 `dev` / `test` / `prod`，以及面向这三条分支的 PR
+（同一分支连续推送会取消旧运行）。整份工作流只做一件事：
+
+```bash
+make check
+```
+
+不另写一套命令是刻意的 —— 两套命令迟早分叉，然后就是「本地绿、CI 红」，
+或者更糟：CI 绿而本地那条真闸门没人跑。
+
+| 准备 | 做法 | 为什么 |
+| --- | --- | --- |
+| 数据库 | `services: postgres:16` + `make test-setup` | 集成测试跑的是真实 PostgreSQL，不是 mock |
+| 环境 | `cp .env.example .env` + 两行 `sed` 改数据库连接 | 跑的就是「照 §2 做一遍」得到的环境，不是 CI 特供配置 |
+| 账号 | job 级 `PG_USER=postgres` `PGPASSWORD=postgres` | `Makefile` 的 `PG_USER ?= $(shell whoami)` 是**本机开发**假设；环境变量在 make 里优先于 `?=`，所以不必为 CI 改 Makefile |
+
+CI 与本地唯一有意的差异就是上面那三行；其余（Python 3.12 / Node 22 / pnpm 11.21.0）都对齐开发机
+（pnpm 大版本会改 lockfile 解释方式，两边不一致时 `--frozen-lockfile` 会把「环境差异」报成「依赖冲突」）。
+
+两处刻意的取舍：
+
+- **OSM 原始数据（约 3.8MB）入库**：集成测试缺数据是 fail 而不是 skip（§6），所以 CI 要么真能重建知识库，
+  要么就得把集成测试排除掉 —— 后者等于给「线上是验过的提交」打折扣。代价：`make fetch-osm` 重跑会改动已跟踪文件。
+- **不在 CI 里重复跑 lint / mypy / 覆盖率**：它们本来就是 `make check` 的一部分。
+
+想让 CI 与本地完全一致（含 Python / Node / pnpm 版本），就本地跑同一串命令：
+
+```bash
+cp .env.example .env   # 然后把 DATABASE_URL / TEST_DATABASE_URL 改成你的账号
+make test-setup && make check
 ```

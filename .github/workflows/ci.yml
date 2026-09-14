@@ -1,0 +1,94 @@
+name: CI
+
+# 只在这三条分支与面向它们的 PR 上跑：dev 是主开发分支，test/prod 是提升目标。
+# 提升分支也验证，否则「线上是验过的那个提交」只是一句口头承诺（见 RUNNING.md §11）。
+# 键名加引号：YAML 1.1 的解析器会把裸 `on:` 读成布尔 true，
+# 用 PyYAML 之类工具校验本文件时会变成 KeyError（GitHub 自己不受影响，但没必要留这个坑）。
+"on":
+  push:
+    branches: [dev, test, prod]
+  pull_request:
+    branches: [dev, test, prod]
+  workflow_dispatch:
+
+# 同一分支连续推送时只保留最新一次运行：旧运行的结论已经过期，占着机器没意义。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: make check（lint + 类型 + 前后端覆盖率闸门 + 全量测试）
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # 集成测试跑在**真实 PostgreSQL** 上，不是 mock：conftest 会自己迁移测试库、
+    # 并用入库的 OSM 原始数据重建知识库，所以这里必须有一个能连的库。
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tripdecider_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # Makefile 里 `PG_USER ?= $(shell whoami)` 是**本机开发**的假设，CI 里 whoami 是
+      # runner，Postgres 里没有这个角色。环境变量在 make 里优先于 `?=`，所以这一个变量
+      # 就够 —— 不用为了 CI 去改 Makefile 的默认值（那会让本地也多一处要维护的分支）。
+      PG_USER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v7
+
+      - name: 安装 uv（含依赖缓存）
+        uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          # 与开发机同版本：pnpm 大版本会改 lockfile 解释方式，CI 与本地不一致时
+          # `--frozen-lockfile` 会把「环境差异」报成「依赖冲突」。
+          version: 11.21.0
+
+      - name: 安装 Node（缓存 pnpm store）
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: 生成 .env
+        run: |
+          # 与 `make setup` 同样从模板出发，只把数据库连接换成 runner 上的 postgres 账号。
+          # 这样 CI 跑的就是「照文档做一遍」得到的环境，而不是一套 CI 特供配置。
+          cp .env.example .env
+          sed -i -E 's#^DATABASE_URL=.*#DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/tripdecider_dev#' .env
+          sed -i -E 's#^TEST_DATABASE_URL=.*#TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/tripdecider_test#' .env
+          grep -E '^(ENV|DATABASE_URL|TEST_DATABASE_URL|LLM_PROVIDER|SEARCH_PROVIDER|MAP_PROVIDER)=' .env
+
+      - name: 安装后端依赖
+        run: cd backend && uv sync --frozen
+
+      - name: 安装前端依赖
+        run: cd frontend && pnpm install --frozen-lockfile
+
+      - name: 准备测试库（建库 + 迁移）
+        run: make test-setup
+
+      # 唯一的质量闸门。它自己包含 lint / mypy / 后端覆盖率 / 前端覆盖率，
+      # 所以 CI 里**不重复**跑这些步骤 —— 两套命令迟早会分叉，然后「本地绿、CI 红」。
+      - name: make check
+        run: make check

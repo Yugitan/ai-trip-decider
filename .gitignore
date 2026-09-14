@@ -33,8 +33,13 @@ blob-report/
 *.pem
 *.key
 
-# ── 抓取到的原始数据（体积大，可用 make fetch-osm 重新生成）──────────────────
+# ── 抓取到的原始数据 ────────────────────────────────────────────────────────
+# 两份 OSM 原始 JSON（合计约 3.8MB）**刻意入库**：集成测试缺数据是 fail 而不是 skip，
+# CI 必须在没有 Overpass、不跑 9 分钟抓取的前提下复现真实知识库（见 .github/workflows/ci.yml）。
+# 代价：`make fetch-osm` 重跑会改动这两份已跟踪的文件 —— 这是预期的，「数据变了」应当被看见。
 backend/data/raw/*.json
+!backend/data/raw/osm_guangzhou_raw.json
+!backend/data/raw/osm_guangzhou_curated_extras.json
 !backend/data/raw/.gitkeep
 
 # ── 本地工具的工作目录（不是项目内容）───────────────────────────────────────
