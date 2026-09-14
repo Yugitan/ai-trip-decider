@@ -536,8 +536,19 @@ DeepSeek 单价校准后，两个测试的依据变了，因此**改的是断言
 
 | # | 事 | 状态 | 说明 |
 | --- | --- | --- | --- |
-| CI-1 | GitHub Actions 跑 `make check` | ✅ | `services: postgres:16` + `make test-setup`；CI 的 `.env` 从 `.env.example` 生成，只改两行数据库连接 |
-| CI-2 | OSM 原始数据（约 3.8MB）入库 | ✅ | 集成测试缺数据是 **fail 而不是 skip**；不这么做就只能把集成测试排除在 CI 之外 |
+| CI-1 | GitHub Actions 跑 `make check` | ✅ | `services: postgres:16` + `make test-setup`；CI 的 `.env` 从 `.env.example` 生成，只改两行数据库连接。**首跑通过，4.2 分钟**（[run #2](https://github.com/Yugitan/ai-trip-decider/actions/runs/34800434537)） |
+| CI-2 | OSM 原始数据（约 3.8MB）入库 | ✅ | 集成测试缺数据是 **fail 而不是 skip**；不这么做就只能把集成测试排除在 CI 之外。CI 里知识库是**真建出来的**（日志里能看到 seed 与关系计算） |
+
+CI 实测与本地的一处差异（不是故障，是设计）：
+
+```
+CI    ： 989 passed, 2 skipped     ← 两条 test_llm_live.py 真调模型用例（CI 无 DEEPSEEK_API_KEY）
+本地 ： 991 passed                 ← 本机 .env 里配了 Key，所以那两条真跑
+```
+
+首跑还撞了一个坑，已修并写进工作流注释：`astral-sh/setup-uv` 的移动 major 标签只到 `v7`，
+release 已到 `v10.1.0` —— 写 `@v10` 会让 job 在 “Set up job” 就报 `unable to find version v10`，
+一个测试都跑不到。**教训**：第三方 action 的 `@vN` 别名不是平台保证的，别按 release 号猜。
 
 ### 决策与代价
 

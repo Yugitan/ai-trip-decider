@@ -331,6 +331,24 @@ CI 里就三步准备，全部照文档做：
   代价写在这里：`make fetch-osm` 重跑会改动这两份已跟踪的文件。
 - **不在 CI 里重复跑 lint / mypy / 覆盖率**：它们都是 `make check` 的一部分。重复写两遍只会多出两处会腐烂的配置。
 
+首次通过实测（[run #2](https://github.com/Yugitan/ai-trip-decider/actions/runs/34800434537)，4.2 分钟）：
+
+```
+All checks passed!                              ← ruff
+Success: no issues found in 117 source files   ← mypy strict
+TOTAL    5896 stmts   267 miss   95%           ← 覆盖率闸门
+989 passed, 2 skipped, 7 warnings in 143.37s    ← 后端
+Tests  189 passed (189)                         ← 前端
+```
+
+**CI 是 989 + 2 skipped，本地是 991** —— 差的正是 `test_llm_live.py` 的两条真实模型调用：
+CI 里没有 `DEEPSEEK_API_KEY`，它们按设计跳过并打印原因。这个差异本身就是一个可见性收益：
+「有 Key 才跑」这件事在 CI 日志里能看见，而不是无人知晓。
+
+第一次跑还撞了一个坑（已修，并写进工作流注释）：`astral-sh/setup-uv` 的移动 major 标签只到 `v7`，
+而 release 已到 `v10.1.0` —— 写 `@v10` 会让 job 在 “Set up job” 就报 `unable to find version v10`，
+一个测试都跑不到。现在四个 action 的 ref 都固定到能解析的版本。
+
 ---
 
 ## 无 Key 也能跑

@@ -10,7 +10,7 @@
 > `make check`（2026-09-13 实跑，exit=0）、`/api/v1/dev/*` 与 `/dev` 页面（开发面板）。
 >
 > **2026-09-14 追加实跑**：`make cost`（首次跑通，产物 `docs/COST_REPORT.md`）、`make check`（exit=0）、
-> `git push` 三条分支（见 §11）。
+> `git push` 三条分支（见 §11）、**GitHub Actions 首跑通过**（4.2 分钟，见 §12）。
 >
 > **未实测**（文中数字来自 `README.md`/`Makefile`）：`make setup`（会装依赖，没有重跑）、
 > `make fetch-osm`（需网络，约 9 分钟）、
@@ -593,6 +593,20 @@ make check
 
 CI 与本地唯一有意的差异就是上面那三行；其余（Python 3.12 / Node 22 / pnpm 11.21.0）都对齐开发机
 （pnpm 大版本会改 lockfile 解释方式，两边不一致时 `--frozen-lockfile` 会把「环境差异」报成「依赖冲突」）。
+
+首次通过实测（[run #2](https://github.com/Yugitan/ai-trip-decider/actions/runs/34800434537)，**4.2 分钟**）：
+
+```
+All checks passed!                              ← ruff
+Success: no issues found in 117 source files   ← mypy strict
+TOTAL    5896 stmts   267 miss   95%           ← 覆盖率闸门
+989 passed, 2 skipped, 7 warnings in 143.37s    ← 后端
+Tests  189 passed (189)                         ← 前端
+```
+
+**CI 是 989 + 2 skipped，本机（配了 Key）是 991**：差的就是 `tests/integration/test_llm_live.py`
+那两条真实模型调用，CI 里没有 `DEEPSEEK_API_KEY`，它们按设计跳过并打印原因（§6）。
+看到 “2 skipped” 不是故障，是「这批用例本来就不该在无 Key 环境下跑」的如实交代。
 
 两处刻意的取舍：
 
