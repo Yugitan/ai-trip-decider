@@ -489,6 +489,7 @@ React 每次都会打 `In HTML, <html> cannot be a child of <div>` —— 测试
 | --- | --- | --- | --- |
 | M4-16 | 前端 SSE 进度流 + `meta.llm` 展示 | ✅ | 见上表；`planner-form` 从「假装提交成功」改为真实订阅 `stream_url` |
 | M4-17 | 开发设置面板（`/dev`） | ✅ | 三道门：路由只在 `ENV=development` 注册 · `ADMIN_TOKEN`（未设时只允许本机）· 白名单（`DATABASE_URL`/`SESSION_SECRET`/`ENV` 刻意排除） |
+| M4-18 | 成本实测报告 `docs/COST_REPORT.md`（`make cost` 首次跑通） | ✅ | 11 次真实 LLM 调用 · 缓存命中 1 · 0.004140 元；8 条「校准前落库」的旧记录如实标为未校准，不美化 |
 
 ### 本轮发现并修复的问题
 
@@ -498,6 +499,8 @@ React 每次都会打 `In HTML, <html> cannot be a child of <div>` —— 测试
 | 59 | **Secret 被描述成可以清空，实际做不到**：后端把空值定义为「清空该项」（`_validate_value`），而前端为了区分「没碰过」与「想清空」一律跳过空值 —— 于是界面只能写不能删，说明文字却写着「填入一个空格后再删掉」（照做也不生效） | 🟡 中（诚实性） | 清空改为**显式动作**：「清空该项」按钮 → 提交空值（`changedEnvValues(..., cleared)`），留空仍是「不修改」；错误文案换成真话 |
 | 60 | **首页表单稳定 422**（M5 起步时暴露）：表单把界面上的中文标签直接当请求体发出去（`city="广州"`、`preferences=["美食"]`），而后端只认枚举值（`guangzhou` / `food`）—— 点「开始规划」永远失败。它把 M4-16 的成果（前端展示 `meta.llm`）完全挡在 UI 之外：**写了一个用户永远看不到的界面**；而且两端单测/lint/类型检查**全是绿的** | 🔴 高（功能不可用 + 诚实性） | ① 换算显式写在 `planner-form.buildPayload()` 一处（`CITY_OPTIONS[*].api` / `PREFERENCE_OPTIONS[*].api`），**不改后端** —— 接口只认枚举值是应该的，放宽等于让接口语义跟着 UI 文案漂移；② `lib/api.ts` 的 `PlanRequest` 写明这是线上格式；③ 新增**跨语言契约测试**：前端用例直接读 `../config/scoring.yaml` 比对 `preference_dimensions` 键，漏配一个偏好就会红 |
 | 61 | **404 的文案在 M4 交付后变成误导**：规划接口已经存在，此时 404/405/501 的真实原因几乎一定是「后端没启动 / 版本过旧 / 地址配错」，而界面仍在说「规划引擎正在开发中（M4 里程碑）」—— 把排障引向"等一个已上线的功能" | 🟢 低 | 改为「后端没有这个接口（HTTP xxx）：通常是后端没启动、版本过旧，或前端配的地址不对」，并把测试名一起改正 |
+| 62 | **`make check` 会偷偷改写一份被跟踪的文档**：集成测试 `conftest` 每次都重建测试库，复用 `scripts/seed_guangzhou.py`，而脚本**无条件**把 `docs/DATA_REPORT.md` 写回磁盘 —— 于是每跑一次测试，工作区就凭空多出一个「已修改」的文件；更糟的是这份报告里的数字来自**测试库**，提交上去等于拿测试数据冒充数据现状 | 🟡 中（测试污染工作区 + 诚实性） | 建库脚本新增 `write_report: bool = True`，集成测试显式传 `False`；文档只由人工 `make seed` / `make report` 落盘。修完实测：`make check` 后 `git status` 里 `docs/` 干净 |
+| 63 | **成本报表把两种「未校准」混为一谈**：`pricing_calibrated=false` 的提示固定在说「单价在 `pricing.yaml` 里是 `null`」，而真实原因多是**窗口内混着校准前落库的旧记录**（本机 11 条里 8 条如此）—— 照着提示去 `pricing.yaml` 找 null 会一无所获 | 🟢 低（诚实性） | 报表与 `CostStore.summary()` 的说明改为同时点明两种来源，并补一条「换个干净库重跑就会变成 ✅」 |
 
 ### 单元测试的同步更新（不是"改测试让它变绿"）
 

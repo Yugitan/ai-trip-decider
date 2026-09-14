@@ -830,7 +830,7 @@ def build_report(stats: SeedStats, kb_version: str, quality: dict[str, object] |
 # ════════════════════════════════════════════════════════════════════════════
 
 
-async def run(*, dry_run: bool, force: bool) -> int:
+async def run(*, dry_run: bool, force: bool, write_report: bool = True) -> int:
     from app.core.paths import curated_data_dir, docs_dir, raw_data_dir
 
     setup_logging("INFO")
@@ -909,9 +909,15 @@ async def run(*, dry_run: bool, force: bool) -> int:
     print(f"   地点 {stats.places_written} · 别名 {stats.aliases_written} · 路线 {stats.routes_written}")
 
     report = build_report(stats, kb_version)
-    report_path = docs_dir() / "DATA_REPORT.md"
-    report_path.write_text(report, encoding="utf-8")
-    print(f"\n⑥ 数据报告：{report_path}")
+    # ``write_report=False`` 是为集成测试准备的：conftest 每次都重建测试库，
+    # 于是 ``make check`` 会把 docs/DATA_REPORT.md 一起改写，工作区凭空变脏，
+    # 而且报告里的数字来自**测试库**。建库脚本只应在人工调用时落这份文档。
+    if write_report:
+        report_path = docs_dir() / "DATA_REPORT.md"
+        report_path.write_text(report, encoding="utf-8")
+        print(f"\n⑥ 数据报告：{report_path}")
+    else:
+        print("\n⑥ 数据报告：已跳过（write_report=False，调用方为测试）")
 
     print("\n" + "=" * 70)
     print(report)

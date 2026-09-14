@@ -76,8 +76,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         "## 读报表前必看",
         "",
         f"- 未校准记录数：**{summary['uncalibrated_rows']}**。"
-        "未校准的单价在 `config/pricing.yaml` 里是 `null`，计算时按 0 记入，"
-        "所以这些行的金额**不代表真实支出**。",
+        "这类记录写入时对应单价是 `null`（或在 `config/pricing.yaml` 校准之前就已落库），"
+        "计算时按 0 记入，所以这些行的金额**不代表真实支出**。",
+        "- 因此 `pricing_calibrated=false` 的常见原因不是“现在还有 null”，"
+        "而是**窗口内混着校准前的旧记录**；清掉测试数据或换个干净库重跑就会变成 ✅。",
         "- 熔断并不依赖金额：`plan_llm_calls` / `plan_map_calls` / 搜索查询数都是"
         "**按次数**的硬上限，即使单价未校准也能兜住失控调用。",
         "- 校准流程见 `config/pricing.yaml` 顶部说明；校准后重新跑一次真实调用核对 token 数与账单。",

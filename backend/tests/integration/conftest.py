@@ -138,7 +138,7 @@ def _prepared_test_db() -> Iterator[None]:
 
             print("\n[集成测试] 测试库知识库为空，正在建库（复用 scripts/seed_guangzhou.py）…")
             try:
-                exit_code = await seed_run(dry_run=False, force=True)
+                exit_code = await seed_run(dry_run=False, force=True, write_report=False)
             except SystemExit as exc:  # 建库脚本用 SystemExit 报告前置条件缺失
                 await dispose_engines()
                 pytest.fail(f"建库失败，本轮集成测试中止：{exc}")

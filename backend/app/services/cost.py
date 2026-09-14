@@ -358,7 +358,10 @@ class CostStore:
             "uncalibrated_rows": int(uncalibrated),
             "pricing_calibrated": int(uncalibrated) == 0,
             "note": (
-                "存在未校准单价，金额不代表真实支出"
+                # 未校准行有两种来源：价目表里单价仍是 null；或该行写入时单价还没填
+                # （校准之前的历史记录）。两种都不能当作真实支出，但必须说清是哪一种，
+                # 否则看到 ⚠️ 的人会去 pricing.yaml 找一个已经不存在的 null。
+                "存在未校准记录（写入时单价为 null，或早于价目表校准），金额不代表真实支出"
                 if int(uncalibrated) > 0
                 else "全部单价已校准"
             ),
