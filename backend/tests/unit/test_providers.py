@@ -14,7 +14,12 @@ from typing import Any, cast
 import pytest
 from pydantic import BaseModel
 
-from app.core.config import Settings, get_pricing_config
+from app.core.config import (
+    IMPLEMENTED_SEARCH_PROVIDERS,
+    SEARCH_KEY_FIELDS,
+    Settings,
+    get_pricing_config,
+)
 from app.core.errors import ErrorCode, ProviderError
 from app.providers.base import LatLng, ProviderHealth
 from app.providers.llm.base import LlmMessage, LlmResponse, LlmTier, LlmUsage, complete_json
@@ -326,6 +331,34 @@ def test_registry_builds_real_providers_when_keys_present() -> None:
     assert isinstance(providers.search, TavilyProvider)
     assert isinstance(providers.map, AmapMapProvider)
     assert providers.degraded_modes() == [], "全部有 Key 时不应报降级（天气免费不算降级）"
+
+
+@pytest.mark.parametrize("name", sorted(IMPLEMENTED_SEARCH_PROVIDERS))
+def test_implemented_search_providers_say_and_do_the_same_thing(name: str) -> None:
+    """★ 名单与工厂不许漂移 ★
+
+    `IMPLEMENTED_SEARCH_PROVIDERS` 是「配置层说谁在跑」与「工厂层真跑谁」的单一事实源。
+    这条测试对名单里每个名字同时断言两件事：配置层认它生效，且工厂真的构造出了它。
+    只写其中一条（比如只断言 `search_provider_effective`）的话，
+    工厂里漏掉一个分支照样是绿的。
+    """
+    settings = _settings(search_provider=name, **{SEARCH_KEY_FIELDS[name]: "test-key"})
+    assert settings.search_provider_effective == name
+    provider = build_providers(settings).search
+    assert provider.name == name
+    assert provider.health().degraded is False, "说已实现却报告降级，等于什么都没实现"
+
+
+def test_unimplemented_search_keys_never_claim_to_be_effective() -> None:
+    """可配但未实现的 Key（serper / bing）：不许谎报生效，且要说清 Key 被忽略了。"""
+    for name, field in SEARCH_KEY_FIELDS.items():
+        if name in IMPLEMENTED_SEARCH_PROVIDERS:
+            continue
+        settings = _settings(search_provider="auto", **{field: "test-key"})
+        assert settings.search_provider_effective == "seed_only"
+        providers = build_providers(settings)
+        assert isinstance(providers.search, SeedOnlyProvider)
+        assert any(mode.startswith(f"search:{name}(") for mode in providers.degraded_modes())
 
 
 def test_registry_falls_back_to_haversine_and_null_weather() -> None:

@@ -25,6 +25,8 @@ from pydantic import ValidationError
 
 from app.core import config as config_module
 from app.core.config import (
+    IMPLEMENTED_SEARCH_PROVIDERS,
+    SEARCH_KEY_FIELDS,
     AdminConfig,
     BudgetFitFormula,
     ConfigError,
@@ -68,8 +70,26 @@ def raw(name: str) -> dict[str, Any]:
 
 
 def make_settings(**overrides: Any) -> Settings:
-    """构造一个不受 .env / 环境变量影响的 Settings 实例。"""
-    return Settings(_env_file=None, **overrides)
+    """构造一个不受 `.env` 与**已导出的环境变量**影响的 Settings 实例。
+
+    `_env_file=None` 只挡住 `.env` **文件**，挡不住 shell 里 export 出来的变量 ——
+    pydantic-settings 总会读环境变量，且环境变量优先于 `.env`。
+    本机把 `DEEPSEEK_API_KEY` 导出到 shell 之后，「配了 OpenAI 的 Key 但 provider 指向
+    deepseek，仍应判定为未配置」这条用例立刻变红：它断言的是"没有 Key 的行为"，
+    却把环境里的 Key 当成了输入（与 `test_providers._settings()` 修过的 #57 同一个坑）。
+    所以这里显式清空全部 Key，让用例的输入完全由它自己决定。
+    """
+    base: dict[str, Any] = {
+        "deepseek_api_key": None,
+        "openai_api_key": None,
+        "anthropic_api_key": None,
+        "tavily_api_key": None,
+        "serper_api_key": None,
+        "bing_search_api_key": None,
+        "amap_web_key": None,
+    }
+    base.update(overrides)
+    return Settings(_env_file=None, **base)
 
 
 def make_curated_place(**overrides: Any) -> dict[str, Any]:
@@ -157,6 +177,41 @@ def test_search_provider_explicit_but_keyless_degrades() -> None:
 def test_search_provider_explicit_with_key_is_effective() -> None:
     settings = make_settings(search_provider="tavily", tavily_api_key="tvly-test")
     assert settings.search_provider_effective == "tavily"
+
+
+def test_search_provider_never_reports_an_unimplemented_provider() -> None:
+    """★ 契约：effective 只允许返回**代码里真的实现了**的名字 ★
+
+    `serper` / `bing` 的 Key 在 `.env` 与 /dev 面板里都存在（预留给以后），
+    而代码里只有 `tavily` 与 `seed_only` 两个实现。
+    以前的行为是：`auto` + Serper Key → 返回 `"serper"`，
+    而 `registry._build_search()` 照样返回 `SeedOnlyProvider` ——
+    于是 `/health`、dev 面板的生效快照都会说「搜索：serper」，实际却在跑 seed_only。
+    这条测试把「配置说谁在跑」与「工厂真跑谁」钉在一起（同类思路见 R14/R12）。
+    """
+    for name, field in SEARCH_KEY_FIELDS.items():
+        if name in IMPLEMENTED_SEARCH_PROVIDERS:
+            continue
+        assert make_settings(search_provider="auto", **{field: "test-key"}).search_provider_effective == "seed_only"
+        assert make_settings(search_provider=name, **{field: "test-key"}).search_provider_effective == "seed_only"
+
+
+def test_search_provider_prefers_implemented_over_unimplemented() -> None:
+    """同时配了 tavily 与 serper 的 Key 时，必须选真的能用的那个。"""
+    settings = make_settings(
+        search_provider="auto", tavily_api_key="tvly-test", serper_api_key="serper-test"
+    )
+    assert settings.search_provider_effective == "tavily"
+
+
+def test_ignored_search_keys_are_reported_not_swallowed() -> None:
+    """配了但未实现的 Key 必须能被说出来，否则用户只能对着填了 Key 的输入框猜。"""
+    settings = make_settings(serper_api_key="serper-test", bing_search_api_key="bing-test")
+    assert settings.ignored_search_keys() == ["serper", "bing"]
+    assert any(mode.startswith("search:serper+bing(") for mode in settings.degraded_modes())
+    # 已实现的 Provider 不算「被忽略」；没配 Key 时也不该冒出这条降级提示
+    assert make_settings(tavily_api_key="tvly-test").ignored_search_keys() == []
+    assert not any("已预留" in mode for mode in make_settings().degraded_modes())
 
 
 @pytest.mark.parametrize("provider", ["haversine", "disabled"])

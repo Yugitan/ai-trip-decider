@@ -82,8 +82,18 @@ def _build_llm(settings: Settings) -> LlmProvider:
 
 
 def _build_search(settings: Settings) -> SearchProvider:
+    """搜索装配。只有 `search_provider_effective` 可能是已实现的名字。
+
+    `serper` / `bing` 的 Key 允许配（预留给以后），但配置层不会把它们报成生效，
+    这里自然也不会构造它们 —— 两份判断共用 `IMPLEMENTED_SEARCH_PROVIDERS`，
+    并由 `tests/unit/test_providers.py` 的参数化用例防止漂移。
+    """
     if settings.search_provider_effective == "tavily" and settings.tavily_api_key:
         return TavilyProvider(settings.tavily_api_key)
+    ignored = settings.ignored_search_keys()
+    if ignored:
+        # 配了 Key 却仍然降级，与"没配 Key"是两件事 —— 健康状态里必须说清是哪一件。
+        return SeedOnlyProvider(reason=f"{'+'.join(ignored)}(已预留、尚未实现：Key 不生效)")
     return SeedOnlyProvider()
 
 

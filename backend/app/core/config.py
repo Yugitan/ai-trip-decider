@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -23,6 +23,23 @@ from app.domain.categories import NON_STOP_CATEGORIES, PLACE_CATEGORIES
 # ════════════════════════════════════════════════════════════════════════════
 
 ProviderName = Literal["deepseek", "openai", "anthropic", "disabled"]
+
+# 搜索 Provider 的两份名单，刻意分开写：
+#
+# - `SEARCH_KEY_FIELDS`：**配置里存在**的 Provider（`.env` 有它的 Key 输入框、dev 面板也列它）；
+# - `IMPLEMENTED_SEARCH_PROVIDERS`：**代码里实现了**的 Provider。
+#
+# 为什么必须分开：`search_provider_effective` 决定"界面与 /health 里说谁在跑"，
+# 而 `providers/registry._build_search()` 决定"实际跑谁"。
+# 只要允许 effective 返回一个没实现的实现名，就会出现"在 /dev 面板贴一个 Serper Key、
+# 生效快照显示 serper、实际却在跑 seed_only"这种只有用户能发现的谎报。
+# 因此：**没实现的名字一律不许出现在 effective 里**，且要能说出"你的 Key 被忽略了"。
+SEARCH_KEY_FIELDS: Final[dict[str, str]] = {
+    "tavily": "tavily_api_key",
+    "serper": "serper_api_key",
+    "bing": "bing_search_api_key",
+}
+IMPLEMENTED_SEARCH_PROVIDERS: Final[frozenset[str]] = frozenset({"tavily"})
 
 
 class Settings(BaseSettings):
@@ -111,20 +128,40 @@ class Settings(BaseSettings):
 
     @property
     def search_provider_effective(self) -> str:
+        """实际生效的搜索 Provider。
+
+        只有 :data:`IMPLEMENTED_SEARCH_PROVIDERS` 里的名字才可能出现在返回值里 ——
+        显式配了 `serper` / `bing`（或 `auto` 下只有它们的 Key）时返回 `seed_only`，
+        而不是返回一个代码里查不到实现的名字。被忽略的 Key 由
+        :meth:`ignored_search_keys` 报出来，不静默吞掉。
+        """
         if self.search_provider in ("seed_only", "disabled"):
             return "seed_only"
-        available = {
-            "tavily": bool(self.tavily_api_key),
-            "serper": bool(self.serper_api_key),
-            "bing": bool(self.bing_search_api_key),
-        }
+        available = {name: bool(getattr(self, field)) for name, field in SEARCH_KEY_FIELDS.items()}
         if self.search_provider == "auto":
+            # 按固定顺序取第一个「有 Key 且已实现」的 Provider
             for name, ok in available.items():
-                if ok:
+                if name in IMPLEMENTED_SEARCH_PROVIDERS and ok:
                     return name
+            return "seed_only"
+        if self.search_provider not in IMPLEMENTED_SEARCH_PROVIDERS:
+            # 配置里预留、代码里没实现 → 降级到 seed_only（而不是谎报生效）
             return "seed_only"
         # 显式指定但缺 Key → 降级而不是报错
         return self.search_provider if available.get(self.search_provider) else "seed_only"
+
+    def ignored_search_keys(self) -> list[str]:
+        """配了 Key、但本项目**尚未实现**的搜索 Provider。
+
+        这些 Key 不会生效（`:meth:`search_provider_effective`` 会跳过它们）。
+        返回它们是为了能让 /health 与前端如实说出"你的 Key 被忽略了"，
+        而不是让用户对着一个填了 Key 的输入框猜为什么搜索还是没联网。
+        """
+        return [
+            name
+            for name, field in SEARCH_KEY_FIELDS.items()
+            if name not in IMPLEMENTED_SEARCH_PROVIDERS and getattr(self, field)
+        ]
 
     @property
     def map_provider_effective(self) -> str:
@@ -149,6 +186,11 @@ class Settings(BaseSettings):
             modes.append("llm:disabled(规则引擎+模板兜底)")
         if self.search_provider_effective == "seed_only":
             modes.append("search:seed_only(不联网，仅本地知识库)")
+        ignored_search = self.ignored_search_keys()
+        if ignored_search:
+            # 单独一条：".env 里填了 Key 却没生效" 与 "根本没配 Key" 是两件事，
+            # 后者去配置里看一眼就明白，前者不说就只能靠猜。
+            modes.append(f"search:{'+'.join(ignored_search)}(已预留、尚未实现：Key 不生效)")
         if self.map_provider_effective != "amap":
             modes.append(f"map:{self.map_provider_effective}(距离/耗时为路网或估算值)")
         if self.weather_provider in ("disabled", "null") or not self.weather_provider:

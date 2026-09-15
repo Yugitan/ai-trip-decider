@@ -25,8 +25,19 @@ _REASON = "未配置搜索 API Key（只读本地知识库，不联网）"
 class SeedOnlyProvider:
     name = "seed_only"
 
+    def __init__(self, reason: str | None = None) -> None:
+        """``reason`` 用来覆盖默认的降级原因。
+
+        为什么需要这个参数：默认文案说的是「**没配** Key」，
+        而 `serper` / `bing` 的 Key 属于「**配了但没实现**」
+        （见 `config.IMPLEMENTED_SEARCH_PROVIDERS`）。
+        同一种降级、两种截然不同的原因 —— 沿用默认文案就会把"你没配"和
+        "你配了但我们不生效"混为一谈，而用户只能对着填了 Key 的输入框猜。
+        """
+        self._reason = reason or _REASON
+
     def health(self) -> ProviderHealth:
-        return ProviderHealth(name=self.name, available=False, detail=_REASON, degraded=True)
+        return ProviderHealth(name=self.name, available=False, detail=self._reason, degraded=True)
 
     async def search(
         self,
@@ -45,11 +56,11 @@ class SeedOnlyProvider:
             self.name,
             "extract",
             kind=ErrorCode.PROVIDER_UNAVAILABLE,
-            message=_REASON,
+            message=self._reason,
         )
 
     async def verify(self, claim: Claim) -> Verification:
-        return Verification(status="unknown", confidence=0.0, note=_REASON)
+        return Verification(status="unknown", confidence=0.0, note=self._reason)
 
     def estimate_cost(self, op: str, units: int = 1) -> Decimal:
         return Decimal("0")
