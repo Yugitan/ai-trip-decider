@@ -39,11 +39,26 @@ from typing import Any
 # 因此下面还有 verify_mirrors() 探针，任何镜像都必须先通过"能查到已知地标"的检查。
 MIRRORS = (
     "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 )
+
+# 镜像清单的 2026-09-15 复测（8 个候选，同一条最小查询）：
+#   maps.mail.ru          HTTP 200，命中广州塔           ← 本轮新增，唯一稳定可用的
+#   overpass-api.de       HTTP 406（Apache 层拒绝该客户端）/ 偶发 504
+#   overpass.kumi.systems 连接超时（30s+ 无响应，已从清单移除）
+#   overpass.openstreetmap.fr HTTP 403 · overpass.osm.jp 超时
+#   overpass.osm.ch       HTTP 200 但命中 0 条（区域切片，正是下面注释说的"静默空结果"）
+#   overpass.private.coffee / osm.rambler.ru 连接超时
+# 之所以不因为 "maps.mail.ru 能通" 就把清单收成一条：镜像会轮流挂，
+# 留两个才有冗余；而实测两个同时全挂是可能的，所以探针与报错必须保留。
 
 # 探针：广州塔一定存在，用它验证镜像是否真的有广州数据
 _PROBE_QUERY = '[out:json][timeout:25];node["name"="广州塔"](22.9,113.1,23.3,113.5);out ids 1;'
+
+# 探针超时刻意远小于正式查询（PROBE_TIMEOUT_S << REQUEST_TIMEOUT_S）：
+# 探针只回答"这个镜像活着吗"，几十秒还没回就是死了。用 180s 去等一个死镜像，
+# 会让每次抓取凭空多花 3 分钟（kumi 就是这样），而这段时间什么都学不到。
+PROBE_TIMEOUT_S = 25.0
 
 _verified_mirrors: tuple[str, ...] | None = None
 
@@ -61,7 +76,7 @@ def verify_mirrors(*, verbose: bool = True) -> tuple[str, ...]:
     good: list[str] = []
     for mirror in MIRRORS:
         try:
-            payload = _request(mirror, _PROBE_QUERY.encode("utf-8"), False)
+            payload = _request(mirror, _PROBE_QUERY.encode("utf-8"), False, timeout=PROBE_TIMEOUT_S)
             count = len(payload.get("elements", []))
             if count:
                 good.append(mirror)
@@ -174,12 +189,24 @@ _MEANINGLESS_NAME = re.compile(r"^[\d\s\W_]+$")
 # ── Overpass 查询 ───────────────────────────────────────────────────────────
 
 
-def filter_expr(key: str, values: tuple[str, ...] | None) -> str:
-    """把结构化定义转成 Overpass 标签过滤器。"""
+def value_filters(key: str, values: tuple[str, ...] | None) -> list[str]:
+    """``(键, 允许值)`` → 若干条**单个**标签过滤器。
+
+    ``("railway", ("station", "subway_entrance"))`` →
+    ``['["railway"="station"]', '["railway"="subway_entrance"]']``。
+
+    ★ 为什么逐值展开，而不是写成一条正则 ``~"^(station|subway_entrance)$"`` ★
+    正则过滤器迫使 Overpass 对候选元素做一整趟正则匹配：**同一份** E_transport
+    查询，正则版本在整块广州 bbox 上稳定 **HTTP 504**（实测 43s 后网关超时 ——
+    这就是 TASKS.md 里 B2「整块 bbox 查询 HTTP 504，分片重试仍失败」的真正原因），
+    换成逐值等值过滤器后同一 bbox **HTTP 200 + 2601 个元素**
+    （2026-09-15，maps.mail.ru 镜像）。两者取到的元素是同一批 ——
+    ``~`` 在不带 ``,i`` 时是**区分大小写**的整串匹配（等价于等值比较），
+    所以这不是「放松了查询」，而是把没必要的正则扫描换成等值过滤。
+    """
     if values is None:
-        return f'["{key}"]'
-    joined = "|".join(values)
-    return f'["{key}"~"^({joined})$"]'
+        return [f'["{key}"]']
+    return [f'["{key}"="{value}"]' for value in values]
 
 
 def build_query(specs: list[tuple[str, tuple[str, ...] | None]], bbox: tuple[float, float, float, float]) -> str:
@@ -187,10 +214,13 @@ def build_query(specs: list[tuple[str, tuple[str, ...] | None]], bbox: tuple[flo
     area = f"({south},{west},{north},{east})"
     parts = []
     for key, values in specs:
-        filt = filter_expr(key, values)
-        for element_type in ("node", "way", "relation"):
-            # 只要带 name 的元素：无名 POI 对行程规划没有意义，还会把结果撑爆
-            parts.append(f'  {element_type}["name"]{filt}{area};')
+        # 每个取值各起一条语句。**并列写在同一行才是 AND**
+        # （`["railway"="station"]["railway"="subway_entrance"]` 什么都匹配不到），
+        # 所以展开必须发生在语句层，而不是拼进同一个过滤器里。
+        for filt in value_filters(key, values):
+            for element_type in ("node", "way", "relation"):
+                # 只要带 name 的元素：无名 POI 对行程规划没有意义，还会把结果撑爆
+                parts.append(f'  {element_type}["name"]{filt}{area};')
     body = "\n".join(parts)
     return (
         f"[out:json][timeout:{REQUEST_TIMEOUT_S}];\n"
@@ -199,7 +229,9 @@ def build_query(specs: list[tuple[str, tuple[str, ...] | None]], bbox: tuple[flo
     )
 
 
-def _request(url: str, data: bytes | None, use_get: bool) -> dict[str, Any]:
+def _request(
+    url: str, data: bytes | None, use_get: bool, timeout: float = REQUEST_TIMEOUT_S
+) -> dict[str, Any]:
     if use_get and data is not None:
         url = f"{url}?{urllib.parse.urlencode({'data': data.decode('utf-8')})}"
         body = None
@@ -211,7 +243,7 @@ def _request(url: str, data: bytes | None, use_get: bool) -> dict[str, Any]:
         headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
         method="GET" if (use_get and data is not None) else "POST",
     )
-    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_S) as response:
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         payload: dict[str, Any] = json.loads(response.read().decode("utf-8"))
         return payload
 

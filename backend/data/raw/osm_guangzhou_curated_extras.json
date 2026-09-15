@@ -1,8 +1,8 @@
 {
  "meta": {
-  "collected_at": "2026-09-10T13:45:38.986760+00:00",
+  "collected_at": "2026-09-15T15:15:44.461959+00:00",
   "purpose": "按人工清单定向补抓（主抓取漏掉的 destination）",
-  "osm_snapshot_timestamp": "116992",
+  "osm_snapshot_timestamp": "2026-09-15T15:12:06Z",
   "queried_names": [
    "上下九步行街",
    "东山口",
@@ -67,9 +67,3430 @@
    "黄埔军校旧址",
    "黄埔古港"
   ],
-  "raw_elements": 0,
-  "relevant_records": 0,
+  "raw_elements": 4802,
+  "relevant_records": 212,
   "source": "OpenStreetMap via Overpass API (ODbL)"
  },
- "records": []
+ "records": [
+  {
+   "osm_type": "node",
+   "osm_id": 335938598,
+   "name": "荔湾博物馆",
+   "name_en": "Liwan Museum",
+   "lat": 23.122402,
+   "lng": 113.230537,
+   "source_url": "https://www.openstreetmap.org/node/335938598",
+   "primary_tag": "tourism=museum",
+   "tags": {
+    "name": "荔湾博物馆",
+    "name:en": "Liwan Museum",
+    "name:zh": "荔湾博物馆",
+    "tourism": "museum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 658356566,
+   "name": "越秀公园站 B1出入口",
+   "name_en": null,
+   "lat": 23.143304,
+   "lng": 113.256324,
+   "source_url": "https://www.openstreetmap.org/node/658356566",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "越秀公园站 B1出入口",
+    "opening_hours": "06:08-24:06"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 1068651573,
+   "name": "小洲",
+   "name_en": "Xiaozhou",
+   "lat": 23.062262,
+   "lng": 113.35279,
+   "source_url": "https://www.openstreetmap.org/node/1068651573",
+   "primary_tag": "place=village",
+   "tags": {
+    "name": "小洲",
+    "name:en": "Xiaozhou",
+    "name:zh": "小洲"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 1302112948,
+   "name": "越秀公园D1",
+   "name_en": "Yuexiu Park",
+   "lat": 23.142809,
+   "lng": 113.254999,
+   "source_url": "https://www.openstreetmap.org/node/1302112948",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "越秀公园D1",
+    "name:en": "Yuexiu Park"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 2065849747,
+   "name": "洲村",
+   "name_en": "Zhoucun",
+   "lat": 23.06914,
+   "lng": 113.03575,
+   "source_url": "https://www.openstreetmap.org/node/2065849747",
+   "primary_tag": "place=quarter",
+   "tags": {
+    "name": "洲村",
+    "name:en": "Zhoucun",
+    "name:zh": "洲村"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 2391625066,
+   "name": "越秀公园站 A出入口",
+   "name_en": null,
+   "lat": 23.141368,
+   "lng": 113.256811,
+   "source_url": "https://www.openstreetmap.org/node/2391625066",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "越秀公园站 A出入口",
+    "opening_hours": "06:08-24:06"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 2391625067,
+   "name": "越秀公园站 B2出入口",
+   "name_en": null,
+   "lat": 23.143782,
+   "lng": 113.255732,
+   "source_url": "https://www.openstreetmap.org/node/2391625067",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "越秀公园站 B2出入口",
+    "opening_hours": "06:08-24:06"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 2391625068,
+   "name": "越秀公园站 C出入口",
+   "name_en": null,
+   "lat": 23.143309,
+   "lng": 113.255037,
+   "source_url": "https://www.openstreetmap.org/node/2391625068",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "越秀公园站 C出入口",
+    "opening_hours": "06:08-24:06"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 2391625069,
+   "name": "越秀公园站 D2出入口",
+   "name_en": null,
+   "lat": 23.142763,
+   "lng": 113.255452,
+   "source_url": "https://www.openstreetmap.org/node/2391625069",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "越秀公园站 D2出入口",
+    "opening_hours": "06:08-24:06"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 2668683963,
+   "name": "陶陶居",
+   "name_en": "Tao Tao Ju",
+   "lat": 23.116049,
+   "lng": 113.237124,
+   "source_url": "https://www.openstreetmap.org/node/2668683963",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "陶陶居",
+    "name:en": "Tao Tao Ju",
+    "name:zh": "陶陶居",
+    "amenity": "restaurant",
+    "cuisine": "cantonese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 2708229313,
+   "name": "长隆野生动物世界自驾车",
+   "name_en": "Chimelong Safari on Wheels",
+   "lat": 23.011194,
+   "lng": 113.307548,
+   "source_url": "https://www.openstreetmap.org/node/2708229313",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "长隆野生动物世界自驾车",
+    "name:en": "Chimelong Safari on Wheels",
+    "name:zh": "长隆野生动物世界自驾车",
+    "leisure": "park"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 2915880715,
+   "name": "广州塔站 B出入口",
+   "name_en": null,
+   "lat": 23.108395,
+   "lng": 113.317508,
+   "source_url": "https://www.openstreetmap.org/node/2915880715",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "广州塔站 B出入口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 3022635724,
+   "name": "东山口C",
+   "name_en": null,
+   "lat": 23.12755,
+   "lng": 113.290215,
+   "source_url": "https://www.openstreetmap.org/node/3022635724",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "东山口C",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 3022635725,
+   "name": "东山口D",
+   "name_en": null,
+   "lat": 23.127552,
+   "lng": 113.291573,
+   "source_url": "https://www.openstreetmap.org/node/3022635725",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "东山口D",
+    "wheelchair": "limited"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 3022635726,
+   "name": "东山口E",
+   "name_en": null,
+   "lat": 23.126112,
+   "lng": 113.290336,
+   "source_url": "https://www.openstreetmap.org/node/3022635726",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "东山口E",
+    "wheelchair": "limited"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 3022635727,
+   "name": "东山口F",
+   "name_en": null,
+   "lat": 23.126242,
+   "lng": 113.289775,
+   "source_url": "https://www.openstreetmap.org/node/3022635727",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "东山口F",
+    "wheelchair": "limited"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 3039025449,
+   "name": "广州塔站 A出入口",
+   "name_en": null,
+   "lat": 23.109511,
+   "lng": 113.317608,
+   "source_url": "https://www.openstreetmap.org/node/3039025449",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "广州塔站 A出入口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 3108839244,
+   "name": "海心沙西区码头",
+   "name_en": null,
+   "lat": 23.112785,
+   "lng": 113.318226,
+   "source_url": "https://www.openstreetmap.org/node/3108839244",
+   "primary_tag": "amenity=ferry_terminal",
+   "tags": {
+    "name": "海心沙西区码头",
+    "name:zh": "海心沙西区码头",
+    "amenity": "ferry_terminal"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 3872961719,
+   "name": "广州动物园售票处",
+   "name_en": null,
+   "lat": 23.138114,
+   "lng": 113.302255,
+   "source_url": "https://www.openstreetmap.org/node/3872961719",
+   "primary_tag": "shop=ticket",
+   "tags": {
+    "name": "广州动物园售票处",
+    "shop": "ticket"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 3976646091,
+   "name": "太古仓",
+   "name_en": "Taikoo Warehouse Marina",
+   "lat": 23.091381,
+   "lng": 113.246944,
+   "source_url": "https://www.openstreetmap.org/node/3976646091",
+   "primary_tag": "leisure=marina",
+   "tags": {
+    "name": "太古仓",
+    "name:en": "Taikoo Warehouse Marina",
+    "name:zh": "太古仓",
+    "leisure": "marina"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 4096680946,
+   "name": "陈家祠",
+   "name_en": "Chen Clan Academy",
+   "lat": 23.129727,
+   "lng": 113.241342,
+   "source_url": "https://www.openstreetmap.org/node/4096680946",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "陈家祠",
+    "name:en": "Chen Clan Academy",
+    "name:zh": "陈家祠"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 4590296305,
+   "name": "南信牛奶甜品专家",
+   "name_en": "Nanxin Milk Desserts Expert",
+   "lat": 23.11615,
+   "lng": 113.237568,
+   "source_url": "https://www.openstreetmap.org/node/4590296305",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "南信牛奶甜品专家",
+    "name:en": "Nanxin Milk Desserts Expert",
+    "name:zh": "南信牛奶甜品专家",
+    "opening_hours": "Mo-Su 09:30-23:00",
+    "phone": "+86 20 8138 9904",
+    "addr:street": "第十甫路",
+    "addr:city": "广州市",
+    "amenity": "restaurant",
+    "cuisine": "dessert"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 4591579223,
+   "name": "花城广场",
+   "name_en": "East Lake Garden",
+   "lat": 23.051127,
+   "lng": 113.759049,
+   "source_url": "https://www.openstreetmap.org/node/4591579223",
+   "primary_tag": "amenity=community_centre",
+   "tags": {
+    "name": "花城广场",
+    "name:en": "East Lake Garden",
+    "addr:street": "Dongzong Avenue东纵大道",
+    "amenity": "community_centre"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 4867425997,
+   "name": "陈家祠站 A出入口",
+   "name_en": null,
+   "lat": 23.128155,
+   "lng": 113.240475,
+   "source_url": "https://www.openstreetmap.org/node/4867425997",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "陈家祠站 A出入口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 4867425998,
+   "name": "陈家祠站 D出入口",
+   "name_en": null,
+   "lat": 23.128585,
+   "lng": 113.240464,
+   "source_url": "https://www.openstreetmap.org/node/4867425998",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "陈家祠站 D出入口",
+    "wheelchair": "limited"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 4867425999,
+   "name": "陈家祠站 C出入口",
+   "name_en": null,
+   "lat": 23.128585,
+   "lng": 113.241718,
+   "source_url": "https://www.openstreetmap.org/node/4867425999",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "陈家祠站 C出入口",
+    "wheelchair": "no"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 4897379050,
+   "name": "东山口",
+   "name_en": "Dongshankou",
+   "lat": 23.126053,
+   "lng": 113.289718,
+   "source_url": "https://www.openstreetmap.org/node/4897379050",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "东山口",
+    "name:en": "Dongshankou"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 4897379051,
+   "name": "东山口",
+   "name_en": "Dongshankou",
+   "lat": 23.126026,
+   "lng": 113.289983,
+   "source_url": "https://www.openstreetmap.org/node/4897379051",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "东山口",
+    "name:en": "Dongshankou"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 4920705817,
+   "name": "琶醍",
+   "name_en": "Party Pier",
+   "lat": 23.110414,
+   "lng": 113.334226,
+   "source_url": "https://www.openstreetmap.org/node/4920705817",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "琶醍",
+    "name:en": "Party Pier",
+    "name:zh": "琶醍"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 4994580580,
+   "name": "琶醍",
+   "name_en": "Party Pier",
+   "lat": 23.110446,
+   "lng": 113.334236,
+   "source_url": "https://www.openstreetmap.org/node/4994580580",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "琶醍",
+    "name:en": "Party Pier",
+    "name:zh": "琶醍"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5015027192,
+   "name": "越秀公园",
+   "name_en": "Yuexiu Park",
+   "lat": 23.142391,
+   "lng": 113.255964,
+   "source_url": "https://www.openstreetmap.org/node/5015027192",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "越秀公园",
+    "name:en": "Yuexiu Park",
+    "name:zh": "越秀公园"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5015027193,
+   "name": "越秀公园",
+   "name_en": "Yuexiu Park",
+   "lat": 23.142511,
+   "lng": 113.256191,
+   "source_url": "https://www.openstreetmap.org/node/5015027193",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "越秀公园",
+    "name:en": "Yuexiu Park",
+    "name:zh": "越秀公园"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5017909577,
+   "name": "陈家祠",
+   "name_en": "Chen Clan Academy",
+   "lat": 23.128354,
+   "lng": 113.241298,
+   "source_url": "https://www.openstreetmap.org/node/5017909577",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "陈家祠",
+    "name:en": "Chen Clan Academy",
+    "name:zh": "陈家祠"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5017909578,
+   "name": "陈家祠",
+   "name_en": "Chen Clan Academy",
+   "lat": 23.12848,
+   "lng": 113.241294,
+   "source_url": "https://www.openstreetmap.org/node/5017909578",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "陈家祠",
+    "name:en": "Chen Clan Academy",
+    "name:zh": "陈家祠"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5025407713,
+   "name": "东山口",
+   "name_en": "Dongshankou",
+   "lat": 23.127145,
+   "lng": 113.291006,
+   "source_url": "https://www.openstreetmap.org/node/5025407713",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "东山口",
+    "name:en": "Dongshankou",
+    "name:zh": "东山口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5025407714,
+   "name": "东山口",
+   "name_en": "Dongshankou",
+   "lat": 23.127009,
+   "lng": 113.291042,
+   "source_url": "https://www.openstreetmap.org/node/5025407714",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "东山口",
+    "name:en": "Dongshankou",
+    "name:zh": "东山口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5068988589,
+   "name": "黄埔",
+   "name_en": "Huangpu",
+   "lat": 23.093222,
+   "lng": 113.388721,
+   "source_url": "https://www.openstreetmap.org/node/5068988589",
+   "primary_tag": "place=village",
+   "tags": {
+    "name": "黄埔",
+    "name:en": "Huangpu",
+    "name:zh": "黄埔"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5078787516,
+   "name": "广州塔",
+   "name_en": "Canton Tower",
+   "lat": 23.109049,
+   "lng": 113.31793,
+   "source_url": "https://www.openstreetmap.org/node/5078787516",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "广州塔",
+    "name:en": "Canton Tower",
+    "name:zh": "广州塔",
+    "wikipedia": "zh:广州塔站 (地铁)",
+    "wikidata": "Q5097203"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5078787517,
+   "name": "广州塔",
+   "name_en": "Canton Tower",
+   "lat": 23.109041,
+   "lng": 113.318043,
+   "source_url": "https://www.openstreetmap.org/node/5078787517",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "广州塔",
+    "name:en": "Canton Tower",
+    "name:zh": "广州塔",
+    "wikipedia": "zh:广州塔站 (地铁)",
+    "wikidata": "Q5097203"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5110613834,
+   "name": "珠江夜游码头",
+   "name_en": null,
+   "lat": 23.113097,
+   "lng": 113.318053,
+   "source_url": "https://www.openstreetmap.org/node/5110613834",
+   "primary_tag": "tourism=yes",
+   "tags": {
+    "name": "珠江夜游码头",
+    "name:zh": "珠江夜游码头",
+    "tourism": "yes"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5244240249,
+   "name": "南海神庙",
+   "name_en": "Nanhai God Temple",
+   "lat": 23.085808,
+   "lng": 113.492336,
+   "source_url": "https://www.openstreetmap.org/node/5244240249",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "南海神庙",
+    "name:en": "Nanhai God Temple",
+    "name:zh": "南海神庙"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5244240250,
+   "name": "南海神庙",
+   "name_en": "Nanhai God Temple",
+   "lat": 23.085693,
+   "lng": 113.492315,
+   "source_url": "https://www.openstreetmap.org/node/5244240250",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "南海神庙",
+    "name:en": "Nanhai God Temple",
+    "name:zh": "南海神庙"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5358006683,
+   "name": "太古仓电影库",
+   "name_en": null,
+   "lat": 23.092086,
+   "lng": 113.247323,
+   "source_url": "https://www.openstreetmap.org/node/5358006683",
+   "primary_tag": "amenity=cinema",
+   "tags": {
+    "name": "太古仓电影库",
+    "name:zh": "太古仓电影库",
+    "amenity": "cinema"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5363487032,
+   "name": "广州酒家",
+   "name_en": "Guangzhou Restaurant",
+   "lat": 23.097562,
+   "lng": 113.443434,
+   "source_url": "https://www.openstreetmap.org/node/5363487032",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "广州酒家",
+    "name:en": "Guangzhou Restaurant",
+    "name:zh": "广州酒家",
+    "amenity": "restaurant",
+    "cuisine": "cantonese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5416286477,
+   "name": "广州酒家",
+   "name_en": "Guangzhou Restaurant",
+   "lat": 23.092375,
+   "lng": 113.271054,
+   "source_url": "https://www.openstreetmap.org/node/5416286477",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "广州酒家",
+    "name:en": "Guangzhou Restaurant",
+    "name:zh": "广州酒家",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5578029343,
+   "name": "陈家祠",
+   "name_en": "Chen Clan Academy",
+   "lat": 23.128747,
+   "lng": 113.241384,
+   "source_url": "https://www.openstreetmap.org/node/5578029343",
+   "primary_tag": "railway=station",
+   "tags": {
+    "name": "陈家祠",
+    "name:en": "Chen Clan Academy",
+    "name:zh": "陈家祠",
+    "wikipedia": "zh:陈家祠站",
+    "wikidata": "Q5090740"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5582577701,
+   "name": "越秀公园",
+   "name_en": "Yuexiu Park",
+   "lat": 23.142452,
+   "lng": 113.256077,
+   "source_url": "https://www.openstreetmap.org/node/5582577701",
+   "primary_tag": "railway=station",
+   "tags": {
+    "name": "越秀公园",
+    "name:en": "Yuexiu Park",
+    "name:zh": "越秀公园",
+    "wikipedia": "zh:越秀公园站",
+    "wikidata": "Q5975179"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5594226424,
+   "name": "广州塔",
+   "name_en": "Canton Tower",
+   "lat": 23.109046,
+   "lng": 113.317985,
+   "source_url": "https://www.openstreetmap.org/node/5594226424",
+   "primary_tag": "railway=station",
+   "tags": {
+    "name": "广州塔",
+    "name:en": "Canton Tower",
+    "name:zh": "广州塔",
+    "wikipedia": "zh:广州塔站 (地铁)",
+    "wikidata": "Q5097203",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5751709223,
+   "name": "顺记冰室",
+   "name_en": "Shun Kee Ice Room",
+   "lat": 23.116556,
+   "lng": 113.236242,
+   "source_url": "https://www.openstreetmap.org/node/5751709223",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "顺记冰室",
+    "name:en": "Shun Kee Ice Room",
+    "amenity": "restaurant"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5751709224,
+   "name": "陈添记",
+   "name_en": "Chen Tianji",
+   "lat": 23.116452,
+   "lng": 113.236247,
+   "source_url": "https://www.openstreetmap.org/node/5751709224",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "陈添记",
+    "name:en": "Chen Tianji",
+    "amenity": "restaurant"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5860928581,
+   "name": "海心沙",
+   "name_en": "Haixinsha",
+   "lat": 23.113992,
+   "lng": 113.318651,
+   "source_url": "https://www.openstreetmap.org/node/5860928581",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "海心沙",
+    "name:en": "Haixinsha",
+    "name:zh": "海心沙"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5860928593,
+   "name": "海心沙",
+   "name_en": "Haixinsha",
+   "lat": 23.114123,
+   "lng": 113.318754,
+   "source_url": "https://www.openstreetmap.org/node/5860928593",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "海心沙",
+    "name:en": "Haixinsha",
+    "name:zh": "海心沙"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5861155428,
+   "name": "广州塔",
+   "name_en": "Canton Tower",
+   "lat": 23.109306,
+   "lng": 113.3184,
+   "source_url": "https://www.openstreetmap.org/node/5861155428",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "广州塔",
+    "name:en": "Canton Tower",
+    "name:zh": "广州塔"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5861155433,
+   "name": "广州塔",
+   "name_en": "Canton Tower",
+   "lat": 23.109177,
+   "lng": 113.318293,
+   "source_url": "https://www.openstreetmap.org/node/5861155433",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "广州塔",
+    "name:en": "Canton Tower",
+    "name:zh": "广州塔"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 5861155647,
+   "name": "海心沙站 A出入口",
+   "name_en": null,
+   "lat": 23.114786,
+   "lng": 113.318704,
+   "source_url": "https://www.openstreetmap.org/node/5861155647",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "海心沙站 A出入口",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6191758040,
+   "name": "点都德",
+   "name_en": "Diandoude",
+   "lat": 23.120539,
+   "lng": 113.32193,
+   "source_url": "https://www.openstreetmap.org/node/6191758040",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德",
+    "name:en": "Diandoude",
+    "name:zh": "点都德",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6382740885,
+   "name": "点都德",
+   "name_en": "Diandoude",
+   "lat": 23.123139,
+   "lng": 113.260021,
+   "source_url": "https://www.openstreetmap.org/node/6382740885",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德",
+    "name:en": "Diandoude",
+    "name:zh": "点都德",
+    "addr:street": "惠福东路",
+    "addr:city": "广州市",
+    "amenity": "restaurant",
+    "cuisine": "cantonese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6384507893,
+   "name": "沙面街道",
+   "name_en": "Shamian",
+   "lat": 23.109939,
+   "lng": 113.242949,
+   "source_url": "https://www.openstreetmap.org/node/6384507893",
+   "primary_tag": "place=suburb",
+   "tags": {
+    "name": "沙面街道",
+    "name:en": "Shamian",
+    "name:zh": "沙面街道",
+    "wikipedia": "zh:沙面街道",
+    "wikidata": "Q7223582"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6445088343,
+   "name": "广州动物园售票处",
+   "name_en": null,
+   "lat": 23.13811,
+   "lng": 113.301755,
+   "source_url": "https://www.openstreetmap.org/node/6445088343",
+   "primary_tag": "shop=ticket",
+   "tags": {
+    "name": "广州动物园售票处",
+    "shop": "ticket"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6447338723,
+   "name": "白云山派出所",
+   "name_en": null,
+   "lat": 23.169851,
+   "lng": 113.297772,
+   "source_url": "https://www.openstreetmap.org/node/6447338723",
+   "primary_tag": "amenity=police",
+   "tags": {
+    "name": "白云山派出所",
+    "amenity": "police"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6490092419,
+   "name": "海心沙",
+   "name_en": "Haixinsha",
+   "lat": 23.114053,
+   "lng": 113.318702,
+   "source_url": "https://www.openstreetmap.org/node/6490092419",
+   "primary_tag": "railway=station",
+   "tags": {
+    "name": "海心沙",
+    "name:en": "Haixinsha",
+    "name:zh": "海心沙",
+    "wikipedia": "zh:海心沙站",
+    "wikidata": "Q5937586",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6490092420,
+   "name": "广州塔",
+   "name_en": "Canton Tower",
+   "lat": 23.109241,
+   "lng": 113.318348,
+   "source_url": "https://www.openstreetmap.org/node/6490092420",
+   "primary_tag": "railway=station",
+   "tags": {
+    "name": "广州塔",
+    "name:en": "Canton Tower",
+    "name:zh": "广州塔",
+    "wikipedia": "zh:广州塔站 (地铁)",
+    "wikidata": "Q5097203"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6527674586,
+   "name": "点都德",
+   "name_en": "Diandoude",
+   "lat": 23.137703,
+   "lng": 113.282757,
+   "source_url": "https://www.openstreetmap.org/node/6527674586",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德",
+    "name:en": "Diandoude",
+    "name:zh": "点都德",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6580998405,
+   "name": "广州酒家",
+   "name_en": "Guangzhou Restaurant",
+   "lat": 23.139316,
+   "lng": 113.282195,
+   "source_url": "https://www.openstreetmap.org/node/6580998405",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "广州酒家",
+    "name:en": "Guangzhou Restaurant",
+    "name:zh": "广州酒家",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6595361610,
+   "name": "陶陶居",
+   "name_en": "Tao Tao Ju",
+   "lat": 23.141764,
+   "lng": 113.274878,
+   "source_url": "https://www.openstreetmap.org/node/6595361610",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "陶陶居",
+    "name:en": "Tao Tao Ju",
+    "name:zh": "陶陶居",
+    "amenity": "restaurant",
+    "cuisine": "cantonese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6612632861,
+   "name": "海心沙2号",
+   "name_en": null,
+   "lat": 23.11433,
+   "lng": 113.322538,
+   "source_url": "https://www.openstreetmap.org/node/6612632861",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "海心沙2号",
+    "amenity": "restaurant"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6612632866,
+   "name": "海心沙东区码头",
+   "name_en": null,
+   "lat": 23.113256,
+   "lng": 113.322816,
+   "source_url": "https://www.openstreetmap.org/node/6612632866",
+   "primary_tag": "amenity=ferry_terminal",
+   "tags": {
+    "name": "海心沙东区码头",
+    "amenity": "ferry_terminal"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6640473667,
+   "name": "银记肠粉店",
+   "name_en": null,
+   "lat": 23.122735,
+   "lng": 113.306057,
+   "source_url": "https://www.openstreetmap.org/node/6640473667",
+   "primary_tag": "amenity=fast_food",
+   "tags": {
+    "name": "银记肠粉店",
+    "amenity": "fast_food",
+    "cuisine": "chinese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6898322563,
+   "name": "陈家祠",
+   "name_en": "Chen Clan Academy",
+   "lat": 23.129688,
+   "lng": 113.241183,
+   "source_url": "https://www.openstreetmap.org/node/6898322563",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "陈家祠",
+    "name:en": "Chen Clan Academy",
+    "name:zh": "陈家祠"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6906057366,
+   "name": "广州酒家利口福(天河名门店)",
+   "name_en": null,
+   "lat": 23.12145,
+   "lng": 113.310605,
+   "source_url": "https://www.openstreetmap.org/node/6906057366",
+   "primary_tag": "shop=pastry",
+   "tags": {
+    "name": "广州酒家利口福(天河名门店)",
+    "shop": "pastry"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6939439400,
+   "name": "黄埔古港",
+   "name_en": null,
+   "lat": 23.087742,
+   "lng": 113.385632,
+   "source_url": "https://www.openstreetmap.org/node/6939439400",
+   "primary_tag": "historic=ruins",
+   "tags": {
+    "name": "黄埔古港",
+    "historic": "ruins"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 6961527996,
+   "name": "惠食佳",
+   "name_en": null,
+   "lat": 23.110755,
+   "lng": 113.254272,
+   "source_url": "https://www.openstreetmap.org/node/6961527996",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "惠食佳",
+    "amenity": "restaurant"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 7001062085,
+   "name": "沙面国医馆",
+   "name_en": "Shamian Chinese Medical Massage",
+   "lat": 23.110838,
+   "lng": 113.23577,
+   "source_url": "https://www.openstreetmap.org/node/7001062085",
+   "primary_tag": "shop=massage",
+   "tags": {
+    "name": "沙面国医馆",
+    "name:en": "Shamian Chinese Medical Massage",
+    "name:zh": "沙面国医馆",
+    "shop": "massage"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 7391388285,
+   "name": "炳胜品味珠江新城店",
+   "name_en": "Bingsheng Pinwei 1-4F",
+   "lat": 23.117579,
+   "lng": 113.322964,
+   "source_url": "https://www.openstreetmap.org/node/7391388285",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "炳胜品味珠江新城店",
+    "name:en": "Bingsheng Pinwei 1-4F",
+    "amenity": "restaurant"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 8267126127,
+   "name": "东山口书城",
+   "name_en": "Dongshankou Bookstore",
+   "lat": 23.124175,
+   "lng": 113.290407,
+   "source_url": "https://www.openstreetmap.org/node/8267126127",
+   "primary_tag": "shop=books",
+   "tags": {
+    "name": "东山口书城",
+    "name:en": "Dongshankou Bookstore",
+    "shop": "books"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 8282494297,
+   "name": "琶醍",
+   "name_en": "Party Pier",
+   "lat": 23.110428,
+   "lng": 113.334231,
+   "source_url": "https://www.openstreetmap.org/node/8282494297",
+   "primary_tag": "railway=station",
+   "tags": {
+    "name": "琶醍",
+    "name:en": "Party Pier",
+    "name:zh": "琶醍",
+    "wikipedia": "zh:琶醍站",
+    "wikidata": "Q19853176",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 8517892963,
+   "name": "陈家祠站 E出入口",
+   "name_en": null,
+   "lat": 23.129025,
+   "lng": 113.240913,
+   "source_url": "https://www.openstreetmap.org/node/8517892963",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "陈家祠站 E出入口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 8517892967,
+   "name": "陈家祠站 F出入口",
+   "name_en": null,
+   "lat": 23.129933,
+   "lng": 113.241719,
+   "source_url": "https://www.openstreetmap.org/node/8517892967",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "陈家祠站 F出入口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 8517892971,
+   "name": "陈家祠站 G出入口",
+   "name_en": null,
+   "lat": 23.129478,
+   "lng": 113.241771,
+   "source_url": "https://www.openstreetmap.org/node/8517892971",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "陈家祠站 G出入口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 8556413195,
+   "name": "广州塔财富码头",
+   "name_en": null,
+   "lat": 23.110328,
+   "lng": 113.321353,
+   "source_url": "https://www.openstreetmap.org/node/8556413195",
+   "primary_tag": "amenity=ferry_terminal",
+   "tags": {
+    "name": "广州塔财富码头",
+    "name:zh": "广州塔财富码头",
+    "amenity": "ferry_terminal"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 8699641377,
+   "name": "二沙岛",
+   "name_en": "Ersha Island",
+   "lat": 23.112677,
+   "lng": 113.298087,
+   "source_url": "https://www.openstreetmap.org/node/8699641377",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "二沙岛",
+    "name:en": "Ersha Island",
+    "name:zh": "二沙岛"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 8836588975,
+   "name": "陈添记鱼皮",
+   "name_en": "Chen Tianji Fish Skin",
+   "lat": 23.117777,
+   "lng": 113.236312,
+   "source_url": "https://www.openstreetmap.org/node/8836588975",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "陈添记鱼皮",
+    "name:en": "Chen Tianji Fish Skin",
+    "amenity": "restaurant"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 9082441092,
+   "name": "沙面派出所",
+   "name_en": null,
+   "lat": 23.10997,
+   "lng": 113.241918,
+   "source_url": "https://www.openstreetmap.org/node/9082441092",
+   "primary_tag": "amenity=police",
+   "tags": {
+    "name": "沙面派出所",
+    "amenity": "police"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 9090884221,
+   "name": "南海神庙站 C2出入口",
+   "name_en": null,
+   "lat": 23.085993,
+   "lng": 113.492207,
+   "source_url": "https://www.openstreetmap.org/node/9090884221",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "南海神庙站 C2出入口",
+    "description": "C2"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 9090884238,
+   "name": "南海神庙",
+   "name_en": "Nanhai God Temple",
+   "lat": 23.085754,
+   "lng": 113.492328,
+   "source_url": "https://www.openstreetmap.org/node/9090884238",
+   "primary_tag": "railway=station",
+   "tags": {
+    "name": "南海神庙",
+    "name:en": "Nanhai God Temple",
+    "name:zh": "南海神庙",
+    "wikipedia": "zh:南海神庙站",
+    "wikidata": "Q30488762"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 9396731718,
+   "name": "东山口",
+   "name_en": "Dongshankou",
+   "lat": 23.126486,
+   "lng": 113.290164,
+   "source_url": "https://www.openstreetmap.org/node/9396731718",
+   "primary_tag": "railway=station",
+   "tags": {
+    "name": "东山口",
+    "name:en": "Dongshankou",
+    "name:zh": "东山口",
+    "wikipedia": "zh:东山口站",
+    "wikidata": "Q5296023",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 9655567776,
+   "name": "太古仓码头",
+   "name_en": null,
+   "lat": 23.091902,
+   "lng": 113.247571,
+   "source_url": "https://www.openstreetmap.org/node/9655567776",
+   "primary_tag": "tourism=attraction",
+   "tags": {
+    "name": "太古仓码头",
+    "tourism": "attraction"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 9898752134,
+   "name": "陈家祠站 B出入口",
+   "name_en": null,
+   "lat": 23.128201,
+   "lng": 113.241842,
+   "source_url": "https://www.openstreetmap.org/node/9898752134",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "陈家祠站 B出入口",
+    "wheelchair": "no"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 10891405303,
+   "name": "点都德",
+   "name_en": "Diandoude",
+   "lat": 23.129392,
+   "lng": 113.263613,
+   "source_url": "https://www.openstreetmap.org/node/10891405303",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德",
+    "name:en": "Diandoude",
+    "name:zh": "点都德",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 10979180647,
+   "name": "白云山",
+   "name_en": "Baiyunshan",
+   "lat": 22.678182,
+   "lng": 113.973763,
+   "source_url": "https://www.openstreetmap.org/node/10979180647",
+   "primary_tag": "place=locality",
+   "tags": {
+    "name": "白云山",
+    "name:en": "Baiyunshan",
+    "name:zh": "白云山"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 11061931834,
+   "name": "沙面宾馆",
+   "name_en": null,
+   "lat": 23.109022,
+   "lng": 113.238638,
+   "source_url": "https://www.openstreetmap.org/node/11061931834",
+   "primary_tag": "tourism=hotel",
+   "tags": {
+    "name": "沙面宾馆",
+    "tourism": "hotel"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 11085037785,
+   "name": "广州酒家",
+   "name_en": "Guangzhou Restaurant",
+   "lat": 23.167119,
+   "lng": 113.423919,
+   "source_url": "https://www.openstreetmap.org/node/11085037785",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "广州酒家",
+    "name:en": "Guangzhou Restaurant",
+    "name:zh": "广州酒家",
+    "amenity": "restaurant",
+    "cuisine": "cantonese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 11145365705,
+   "name": "点都德",
+   "name_en": "Diandoude",
+   "lat": 23.116189,
+   "lng": 113.258591,
+   "source_url": "https://www.openstreetmap.org/node/11145365705",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德",
+    "name:en": "Diandoude",
+    "name:zh": "点都德",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 11236574796,
+   "name": "北京路天河城B区",
+   "name_en": null,
+   "lat": 23.120734,
+   "lng": 113.264084,
+   "source_url": "https://www.openstreetmap.org/node/11236574796",
+   "primary_tag": "shop=mall",
+   "tags": {
+    "name": "北京路天河城B区",
+    "shop": "mall"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 11278477169,
+   "name": "点都德",
+   "name_en": "Diandoude",
+   "lat": 23.121838,
+   "lng": 113.311109,
+   "source_url": "https://www.openstreetmap.org/node/11278477169",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德",
+    "name:en": "Diandoude",
+    "name:zh": "点都德",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 11776543369,
+   "name": "点都德",
+   "name_en": "Diandoude",
+   "lat": 23.129111,
+   "lng": 113.266118,
+   "source_url": "https://www.openstreetmap.org/node/11776543369",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德",
+    "name:en": "Diandoude",
+    "name:zh": "点都德",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 11867655898,
+   "name": "黄埔古港",
+   "name_en": "Huangpu Ancient Port",
+   "lat": 23.095605,
+   "lng": 113.395576,
+   "source_url": "https://www.openstreetmap.org/node/11867655898",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "黄埔古港",
+    "name:en": "Huangpu Ancient Port",
+    "name:zh": "黄埔古港"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 11867655899,
+   "name": "黄埔古港",
+   "name_en": "Huangpu Ancient Port",
+   "lat": 23.09564,
+   "lng": 113.395599,
+   "source_url": "https://www.openstreetmap.org/node/11867655899",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "黄埔古港",
+    "name:en": "Huangpu Ancient Port",
+    "name:zh": "黄埔古港"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12065884862,
+   "name": "点都德",
+   "name_en": "Diandoude",
+   "lat": 22.525578,
+   "lng": 113.933921,
+   "source_url": "https://www.openstreetmap.org/node/12065884862",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德",
+    "name:en": "Diandoude",
+    "name:zh": "点都德",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12097207451,
+   "name": "云台花园",
+   "name_en": "Yuntai Garden",
+   "lat": 23.156638,
+   "lng": 113.287842,
+   "source_url": "https://www.openstreetmap.org/node/12097207451",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "云台花园",
+    "name:en": "Yuntai Garden",
+    "name:zh": "云台花园"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12097207452,
+   "name": "云台花园",
+   "name_en": "Yuntai Garden",
+   "lat": 23.156502,
+   "lng": 113.287846,
+   "source_url": "https://www.openstreetmap.org/node/12097207452",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "云台花园",
+    "name:en": "Yuntai Garden",
+    "name:zh": "云台花园"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12098368994,
+   "name": "广东美术馆",
+   "name_en": "Guangdong Museum of Art",
+   "lat": 23.103031,
+   "lng": 113.23556,
+   "source_url": "https://www.openstreetmap.org/node/12098368994",
+   "primary_tag": "tourism=museum",
+   "tags": {
+    "name": "广东美术馆",
+    "name:en": "Guangdong Museum of Art",
+    "opening_hours": "Tu-Su 09:00-17:00",
+    "tourism": "museum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12142304096,
+   "name": "沙面实验学校",
+   "name_en": null,
+   "lat": 23.109085,
+   "lng": 113.240557,
+   "source_url": "https://www.openstreetmap.org/node/12142304096",
+   "primary_tag": "amenity=school",
+   "tags": {
+    "name": "沙面实验学校",
+    "amenity": "school"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12152697023,
+   "name": "二沙岛",
+   "name_en": "Ersha Island",
+   "lat": 23.112536,
+   "lng": 113.298053,
+   "source_url": "https://www.openstreetmap.org/node/12152697023",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "二沙岛",
+    "name:en": "Ersha Island",
+    "name:zh": "二沙岛"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12200978974,
+   "name": "广州酒家",
+   "name_en": "Guangzhou Restaurant",
+   "lat": 23.127916,
+   "lng": 113.366654,
+   "source_url": "https://www.openstreetmap.org/node/12200978974",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "广州酒家",
+    "name:en": "Guangzhou Restaurant",
+    "name:zh": "广州酒家",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12235170231,
+   "name": "白云山",
+   "name_en": null,
+   "lat": 23.173071,
+   "lng": 113.56518,
+   "source_url": "https://www.openstreetmap.org/node/12235170231",
+   "primary_tag": "natural=peak",
+   "tags": {
+    "name": "白云山",
+    "natural": "peak"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12236375412,
+   "name": "花城广场北",
+   "name_en": "Huacheng Square North",
+   "lat": 23.130237,
+   "lng": 113.317193,
+   "source_url": "https://www.openstreetmap.org/node/12236375412",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "花城广场北",
+    "name:en": "Huacheng Square North",
+    "name:zh": "花城广场北"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12236375413,
+   "name": "花城广场北",
+   "name_en": "Huacheng Square North",
+   "lat": 23.130073,
+   "lng": 113.317178,
+   "source_url": "https://www.openstreetmap.org/node/12236375413",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "花城广场北",
+    "name:en": "Huacheng Square North",
+    "name:zh": "花城广场北"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12255401847,
+   "name": "广州塔",
+   "name_en": "Canton Tower",
+   "lat": 23.045575,
+   "lng": 113.360525,
+   "source_url": "https://www.openstreetmap.org/node/12255401847",
+   "primary_tag": "tourism=artwork",
+   "tags": {
+    "name": "广州塔",
+    "name:en": "Canton Tower",
+    "name:zh": "广州塔",
+    "tourism": "artwork"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12279132341,
+   "name": "云台花园",
+   "name_en": "Yuntai Garden",
+   "lat": 23.156563,
+   "lng": 113.287843,
+   "source_url": "https://www.openstreetmap.org/node/12279132341",
+   "primary_tag": "railway=station",
+   "tags": {
+    "name": "云台花园",
+    "name:en": "Yuntai Garden",
+    "name:zh": "云台花园",
+    "wikipedia": "zh:云台花园站",
+    "wikidata": "Q119255827"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12292015488,
+   "name": "天河城outlet",
+   "name_en": null,
+   "lat": 23.011608,
+   "lng": 113.336506,
+   "source_url": "https://www.openstreetmap.org/node/12292015488",
+   "primary_tag": "shop=department_store",
+   "tags": {
+    "name": "天河城outlet",
+    "shop": "department_store"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12432820071,
+   "name": "云台花园站C1出口",
+   "name_en": null,
+   "lat": 23.156949,
+   "lng": 113.287925,
+   "source_url": "https://www.openstreetmap.org/node/12432820071",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "云台花园站C1出口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12432820084,
+   "name": "云台花园站C2出口",
+   "name_en": null,
+   "lat": 23.157623,
+   "lng": 113.287156,
+   "source_url": "https://www.openstreetmap.org/node/12432820084",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "云台花园站C2出口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12432820093,
+   "name": "云台花园站E出口",
+   "name_en": null,
+   "lat": 23.156128,
+   "lng": 113.288072,
+   "source_url": "https://www.openstreetmap.org/node/12432820093",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "云台花园站E出口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12432820094,
+   "name": "云台花园站A出口",
+   "name_en": null,
+   "lat": 23.156692,
+   "lng": 113.289078,
+   "source_url": "https://www.openstreetmap.org/node/12432820094",
+   "primary_tag": "railway=subway_entrance",
+   "tags": {
+    "name": "云台花园站A出口"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12705072354,
+   "name": "二沙岛",
+   "name_en": "Ersha Island",
+   "lat": 23.112629,
+   "lng": 113.298075,
+   "source_url": "https://www.openstreetmap.org/node/12705072354",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "二沙岛",
+    "name:en": "Ersha Island",
+    "name:zh": "二沙岛"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12818343070,
+   "name": "点都德（海燕楼）",
+   "name_en": null,
+   "lat": 23.076823,
+   "lng": 113.268341,
+   "source_url": "https://www.openstreetmap.org/node/12818343070",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德（海燕楼）",
+    "amenity": "restaurant"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12961482900,
+   "name": "二沙岛",
+   "name_en": "Ersha Island",
+   "lat": 23.112605,
+   "lng": 113.29807,
+   "source_url": "https://www.openstreetmap.org/node/12961482900",
+   "primary_tag": "railway=station",
+   "tags": {
+    "name": "二沙岛",
+    "name:en": "Ersha Island",
+    "name:zh": "二沙岛",
+    "wikipedia": "zh:二沙島站",
+    "wikidata": "Q107059717",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12990256555,
+   "name": "广州塔",
+   "name_en": "Canton Tower",
+   "lat": 23.110069,
+   "lng": 113.321462,
+   "source_url": "https://www.openstreetmap.org/node/12990256555",
+   "primary_tag": "railway=station",
+   "tags": {
+    "name": "广州塔",
+    "name:en": "Canton Tower",
+    "name:zh": "广州塔",
+    "wikipedia": "zh:广州塔站 (有轨电车)",
+    "wikidata": "Q18699095",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12990256556,
+   "name": "广州塔",
+   "name_en": "Canton Tower",
+   "lat": 23.110073,
+   "lng": 113.321681,
+   "source_url": "https://www.openstreetmap.org/node/12990256556",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "广州塔",
+    "name:en": "Canton Tower",
+    "name:zh": "广州塔"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12990256557,
+   "name": "广州塔",
+   "name_en": "Canton Tower",
+   "lat": 23.110041,
+   "lng": 113.32168,
+   "source_url": "https://www.openstreetmap.org/node/12990256557",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "广州塔",
+    "name:en": "Canton Tower",
+    "name:zh": "广州塔"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 12999381299,
+   "name": "陶陶居",
+   "name_en": "Tao Tao Ju",
+   "lat": 22.57186,
+   "lng": 113.898376,
+   "source_url": "https://www.openstreetmap.org/node/12999381299",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "陶陶居",
+    "name:en": "Tao Tao Ju",
+    "name:zh": "陶陶居",
+    "amenity": "restaurant",
+    "cuisine": "cantonese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 13025790901,
+   "name": "炳胜品味",
+   "name_en": "Bingsheng Taste",
+   "lat": 23.136996,
+   "lng": 113.32897,
+   "source_url": "https://www.openstreetmap.org/node/13025790901",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "炳胜品味",
+    "name:en": "Bingsheng Taste",
+    "website": "https://www.bingsheng.com/",
+    "addr:street": "天河东路",
+    "amenity": "restaurant",
+    "cuisine": "seafood"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 13033551022,
+   "name": "点都德",
+   "name_en": "Diandoude",
+   "lat": 23.046132,
+   "lng": 113.15102,
+   "source_url": "https://www.openstreetmap.org/node/13033551022",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德",
+    "name:en": "Diandoude",
+    "name:zh": "点都德",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 13257098559,
+   "name": "点都德",
+   "name_en": "Diandoude",
+   "lat": 22.631798,
+   "lng": 114.031783,
+   "source_url": "https://www.openstreetmap.org/node/13257098559",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德",
+    "name:en": "Diandoude",
+    "name:zh": "点都德",
+    "amenity": "restaurant",
+    "cuisine": "cantonese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 13277116163,
+   "name": "点都德",
+   "name_en": "Diandoude",
+   "lat": 22.553748,
+   "lng": 113.882099,
+   "source_url": "https://www.openstreetmap.org/node/13277116163",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "点都德",
+    "name:en": "Diandoude",
+    "name:zh": "点都德",
+    "addr:street": "兴华一路",
+    "amenity": "restaurant",
+    "cuisine": "cantonese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 13380144965,
+   "name": "陶陶居",
+   "name_en": "Tao Tao Ju",
+   "lat": 23.098395,
+   "lng": 113.314089,
+   "source_url": "https://www.openstreetmap.org/node/13380144965",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "陶陶居",
+    "name:en": "Tao Tao Ju",
+    "name:zh": "陶陶居",
+    "amenity": "restaurant",
+    "cuisine": "cantonese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 13514305852,
+   "name": "陶陶居",
+   "name_en": "Tao Tao Ju",
+   "lat": 23.094414,
+   "lng": 113.271662,
+   "source_url": "https://www.openstreetmap.org/node/13514305852",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "陶陶居",
+    "name:en": "Tao Tao Ju",
+    "name:zh": "陶陶居",
+    "amenity": "restaurant",
+    "cuisine": "cantonese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 13695690450,
+   "name": "陶陶居",
+   "name_en": "Tao Tao Ju",
+   "lat": 23.138345,
+   "lng": 113.276137,
+   "source_url": "https://www.openstreetmap.org/node/13695690450",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "陶陶居",
+    "name:en": "Tao Tao Ju",
+    "name:zh": "陶陶居",
+    "amenity": "restaurant",
+    "cuisine": "cantonese"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 13849998003,
+   "name": "广州塔",
+   "name_en": "Canton Tower",
+   "lat": 23.110052,
+   "lng": 113.32147,
+   "source_url": "https://www.openstreetmap.org/node/13849998003",
+   "primary_tag": "railway=stop",
+   "tags": {
+    "name": "广州塔",
+    "name:en": "Canton Tower",
+    "name:zh": "广州塔"
+   }
+  },
+  {
+   "osm_type": "node",
+   "osm_id": 14140382471,
+   "name": "广州珠江太古仓亚朵S酒店",
+   "name_en": "Atour S Hotel Zhujiang Taigucang Guangzhou",
+   "lat": 23.082576,
+   "lng": 113.261203,
+   "source_url": "https://www.openstreetmap.org/node/14140382471",
+   "primary_tag": "tourism=hotel",
+   "tags": {
+    "name": "广州珠江太古仓亚朵S酒店",
+    "name:en": "Atour S Hotel Zhujiang Taigucang Guangzhou",
+    "name:zh": "广州珠江太古仓亚朵S酒店",
+    "addr:street": "工业大道中",
+    "tourism": "hotel"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 9765379,
+   "name": "海心沙",
+   "name_en": null,
+   "lat": 22.982351,
+   "lng": 113.08621,
+   "source_url": "https://www.openstreetmap.org/way/9765379",
+   "primary_tag": "place=islet",
+   "tags": {
+    "name": "海心沙"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 29167398,
+   "name": "海心沙亚运公园",
+   "name_en": "Haixinshayayungongyuan",
+   "lat": 23.11401,
+   "lng": 113.319845,
+   "source_url": "https://www.openstreetmap.org/way/29167398",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "海心沙亚运公园",
+    "name:en": "Haixinshayayungongyuan",
+    "name:zh": "海心沙亚运公园",
+    "leisure": "park",
+    "wikipedia": "zh-yue:海心沙 (天河)"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 29327738,
+   "name": "二沙岛",
+   "name_en": "Ersha Island",
+   "lat": 23.112368,
+   "lng": 113.299565,
+   "source_url": "https://www.openstreetmap.org/way/29327738",
+   "primary_tag": "place=island",
+   "tags": {
+    "name": "二沙岛",
+    "name:en": "Ersha Island",
+    "name:zh": "二沙岛",
+    "wikipedia": "zh-yue:二沙島",
+    "wikidata": "Q3270954"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 30678899,
+   "name": "荔湾湖公园",
+   "name_en": "Liwan Lake Park",
+   "lat": 23.124232,
+   "lng": 113.227974,
+   "source_url": "https://www.openstreetmap.org/way/30678899",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "荔湾湖公园",
+    "name:en": "Liwan Lake Park",
+    "name:zh": "荔湾湖公园",
+    "leisure": "park"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 30678900,
+   "name": "流花湖公园",
+   "name_en": "Liuhua Lake Park",
+   "lat": 23.13945,
+   "lng": 113.244482,
+   "source_url": "https://www.openstreetmap.org/way/30678900",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "流花湖公园",
+    "name:en": "Liuhua Lake Park",
+    "name:zh": "流花湖公园",
+    "leisure": "park",
+    "wikipedia": "zh:流花湖公园",
+    "wikidata": "Q11147899"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 34374887,
+   "name": "广州动物园",
+   "name_en": "Guangzhou Zoological Garden",
+   "lat": 23.143092,
+   "lng": 113.299748,
+   "source_url": "https://www.openstreetmap.org/way/34374887",
+   "primary_tag": "tourism=zoo",
+   "tags": {
+    "name": "广州动物园",
+    "name:en": "Guangzhou Zoological Garden",
+    "name:zh": "广州动物园",
+    "opening_hours": "Mo-Su 08:00-18:00",
+    "website": "https://www.gzzoo.com/",
+    "phone": "+86 20 3837 7572",
+    "addr:district": "越秀",
+    "addr:street": "先烈中路",
+    "addr:city": "广州",
+    "tourism": "zoo",
+    "wikipedia": "zh:广州动物园",
+    "wikidata": "Q11062008",
+    "fee": "yes",
+    "charge": "20CNY"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 119029067,
+   "name": "广州起义烈士陵园",
+   "name_en": "Guangzhou Uprising Martyr Cemetery Park",
+   "lat": 23.131173,
+   "lng": 113.280445,
+   "source_url": "https://www.openstreetmap.org/way/119029067",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "广州起义烈士陵园",
+    "name:en": "Guangzhou Uprising Martyr Cemetery Park",
+    "name:zh": "广州起义烈士陵园",
+    "opening_hours": "Mo-Su 06:00-22:00",
+    "website": "http://www.gzlsly.com/",
+    "phone": "+86 20 8382 8521",
+    "addr:district": "越秀区",
+    "addr:street": "中山二路",
+    "addr:city": "广州市",
+    "leisure": "park",
+    "wikipedia": "zh:广州起义烈士陵园",
+    "wikidata": "Q11062198",
+    "wheelchair": "limited"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 146674393,
+   "name": "六榕寺",
+   "name_en": "Temple of the Six Banyan Trees",
+   "lat": 23.130568,
+   "lng": 113.254634,
+   "source_url": "https://www.openstreetmap.org/way/146674393",
+   "primary_tag": "amenity=place_of_worship",
+   "tags": {
+    "name": "六榕寺",
+    "name:en": "Temple of the Six Banyan Trees",
+    "name:zh": "六榕寺",
+    "addr:district": "Yuexiu",
+    "addr:street": "六榕路",
+    "addr:city": "Guangzhou",
+    "amenity": "place_of_worship",
+    "religion": "buddhist",
+    "wikipedia": "zh:六榕寺",
+    "wikidata": "Q683127",
+    "fee": "no"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 240402425,
+   "name": "正佳广场",
+   "name_en": "Grandview Mall",
+   "lat": 23.134751,
+   "lng": 113.321596,
+   "source_url": "https://www.openstreetmap.org/way/240402425",
+   "primary_tag": "shop=mall",
+   "tags": {
+    "name": "正佳广场",
+    "name:en": "Grandview Mall",
+    "name:zh": "正佳广场",
+    "website": "http://www.zhengjia.com.cn/",
+    "shop": "mall",
+    "wikipedia": "zh:正佳广场",
+    "wikidata": "Q11123293"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 240498647,
+   "name": "太古汇",
+   "name_en": "TaiKoo Hui",
+   "lat": 23.136889,
+   "lng": 113.327043,
+   "source_url": "https://www.openstreetmap.org/way/240498647",
+   "primary_tag": "shop=mall",
+   "tags": {
+    "name": "太古汇",
+    "name:en": "TaiKoo Hui",
+    "name:zh": "太古汇",
+    "website": "https://www.taikoohui.com",
+    "addr:district": "天河",
+    "addr:street": "天河路",
+    "addr:city": "广州",
+    "shop": "mall",
+    "wikipedia": "zh:廣州太古滙",
+    "wikidata": "Q7675717",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 240498649,
+   "name": "天河城",
+   "name_en": "TEE MALL",
+   "lat": 23.134986,
+   "lng": 113.317265,
+   "source_url": "https://www.openstreetmap.org/way/240498649",
+   "primary_tag": "shop=mall",
+   "tags": {
+    "name": "天河城",
+    "name:en": "TEE MALL",
+    "name:zh": "天河城",
+    "website": "http://www.teemall.com.cn",
+    "phone": "+86 20 8559 2818",
+    "shop": "mall",
+    "wikipedia": "zh:天河城",
+    "wikidata": "Q10939906"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 240896442,
+   "name": "广东省博物馆",
+   "name_en": "Guangdong Museum",
+   "lat": 23.117415,
+   "lng": 113.321423,
+   "source_url": "https://www.openstreetmap.org/way/240896442",
+   "primary_tag": "tourism=museum",
+   "tags": {
+    "name": "广东省博物馆",
+    "name:en": "Guangdong Museum",
+    "opening_hours": "Tu-Su 09:00-17:00",
+    "website": "http://www.gdmuseum.com/",
+    "addr:district": "天河区",
+    "addr:street": "珠江东路",
+    "addr:city": "广州市",
+    "tourism": "museum",
+    "wikipedia": "zh:广东省博物馆",
+    "wikidata": "Q5613644",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 243319596,
+   "name": "花城广场",
+   "name_en": "Huacheng Square",
+   "lat": 23.122579,
+   "lng": 113.319181,
+   "source_url": "https://www.openstreetmap.org/way/243319596",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "花城广场",
+    "name:en": "Huacheng Square",
+    "name:zh": "花城广场",
+    "opening_hours": "24/7",
+    "leisure": "park",
+    "wikipedia": "zh:花城广场",
+    "wikidata": "Q29469292"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 246788773,
+   "name": "广州白云山制药厂王老吉足球场",
+   "name_en": null,
+   "lat": 23.204201,
+   "lng": 113.31702,
+   "source_url": "https://www.openstreetmap.org/way/246788773",
+   "primary_tag": "leisure=pitch",
+   "tags": {
+    "name": "广州白云山制药厂王老吉足球场",
+    "name:zh": "广州白云山制药厂王老吉足球场",
+    "leisure": "pitch"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 255622888,
+   "name": "越秀公园",
+   "name_en": "Yuexiu Park",
+   "lat": 23.1425,
+   "lng": 113.261604,
+   "source_url": "https://www.openstreetmap.org/way/255622888",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "越秀公园",
+    "name:en": "Yuexiu Park",
+    "name:zh": "越秀公园",
+    "opening_hours": "Mo-Su 06:00-22:00",
+    "website": "https://gzyuexiupark.org.cn/",
+    "phone": "+86 20 86661950",
+    "addr:district": "越秀区",
+    "addr:street": "解放北路",
+    "addr:city": "广州市",
+    "leisure": "park",
+    "wikipedia": "zh:越秀山",
+    "wikidata": "Q7209907"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 270578520,
+   "name": "白云山停车场",
+   "name_en": null,
+   "lat": 23.197473,
+   "lng": 113.2813,
+   "source_url": "https://www.openstreetmap.org/way/270578520",
+   "primary_tag": "amenity=parking",
+   "tags": {
+    "name": "白云山停车场",
+    "name:zh": "白云山停车场",
+    "amenity": "parking",
+    "fee": "5"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 292110019,
+   "name": "长隆欢乐世界",
+   "name_en": "Chimelong Paradise",
+   "lat": 23.002645,
+   "lng": 113.324142,
+   "source_url": "https://www.openstreetmap.org/way/292110019",
+   "primary_tag": "tourism=theme_park",
+   "tags": {
+    "name": "长隆欢乐世界",
+    "name:en": "Chimelong Paradise",
+    "name:zh": "长隆欢乐世界",
+    "tourism": "theme_park",
+    "wikipedia": "en:Chimelong Paradise",
+    "wikidata": "Q2963655"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 297264709,
+   "name": "长隆野生动物世界",
+   "name_en": "Chimelong Safari Park",
+   "lat": 23.005461,
+   "lng": 113.310223,
+   "source_url": "https://www.openstreetmap.org/way/297264709",
+   "primary_tag": "tourism=zoo",
+   "tags": {
+    "name": "长隆野生动物世界",
+    "name:en": "Chimelong Safari Park",
+    "name:zh": "长隆野生动物世界",
+    "tourism": "zoo",
+    "wikipedia": "zh:長隆野生動物世界",
+    "wikidata": "Q10566319"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 298795705,
+   "name": "南越王博物院王墓展区",
+   "name_en": "Museum of the Western Han Dynasty Mausoleum of the Nanyue King",
+   "lat": 23.140718,
+   "lng": 113.255608,
+   "source_url": "https://www.openstreetmap.org/way/298795705",
+   "primary_tag": "tourism=museum",
+   "tags": {
+    "name": "南越王博物院王墓展区",
+    "name:en": "Museum of the Western Han Dynasty Mausoleum of the Nanyue King",
+    "name:zh": "南越王博物院王墓展区",
+    "opening_hours": "Tu-Su 09:00-17:30",
+    "website": "https://www.nywmuseum.org.cn/",
+    "phone": "+86 20 36182920",
+    "addr:district": "越秀区",
+    "addr:street": "解放北路",
+    "addr:city": "广州市",
+    "tourism": "museum",
+    "wikipedia": "zh:西汉南越王博物馆",
+    "wikidata": "Q1507198",
+    "fee": "yes",
+    "charge": "10 CNY",
+    "wheelchair": "limited"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 308688063,
+   "name": "广东省中医院二沙岛分院",
+   "name_en": "Provincial Traditional Medical Hospital Ersha Island Branch",
+   "lat": 23.114151,
+   "lng": 113.298013,
+   "source_url": "https://www.openstreetmap.org/way/308688063",
+   "primary_tag": "amenity=hospital",
+   "tags": {
+    "name": "广东省中医院二沙岛分院",
+    "name:en": "Provincial Traditional Medical Hospital Ersha Island Branch",
+    "name:zh": "广东省中医院二沙岛分院",
+    "amenity": "hospital"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 328529329,
+   "name": "北京路天河城",
+   "name_en": "Beijing Road Teemall",
+   "lat": 23.122365,
+   "lng": 113.264811,
+   "source_url": "https://www.openstreetmap.org/way/328529329",
+   "primary_tag": "shop=mall",
+   "tags": {
+    "name": "北京路天河城",
+    "name:en": "Beijing Road Teemall",
+    "name:zh": "北京路天河城",
+    "opening_hours": "Mo-Su 10:00-22:00",
+    "website": "https://www.iclub.net.cn",
+    "addr:district": "越秀区",
+    "addr:street": "北京路",
+    "addr:city": "广州市",
+    "shop": "mall"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 330743164,
+   "name": "越秀公园派出所",
+   "name_en": null,
+   "lat": 23.141091,
+   "lng": 113.260212,
+   "source_url": "https://www.openstreetmap.org/way/330743164",
+   "primary_tag": "amenity=police",
+   "tags": {
+    "name": "越秀公园派出所",
+    "name:zh": "越秀公园派出所",
+    "amenity": "police"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 334074698,
+   "name": "沙面网球场",
+   "name_en": null,
+   "lat": 23.108461,
+   "lng": 113.241069,
+   "source_url": "https://www.openstreetmap.org/way/334074698",
+   "primary_tag": "leisure=pitch",
+   "tags": {
+    "name": "沙面网球场",
+    "name:zh": "沙面网球场",
+    "leisure": "pitch"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 347798981,
+   "name": "广东美术馆",
+   "name_en": "Guangdong Museum of Art",
+   "lat": 23.110604,
+   "lng": 113.301918,
+   "source_url": "https://www.openstreetmap.org/way/347798981",
+   "primary_tag": "amenity=arts_centre",
+   "tags": {
+    "name": "广东美术馆",
+    "name:en": "Guangdong Museum of Art",
+    "name:zh": "广东美术馆",
+    "addr:street": "烟雨路",
+    "amenity": "arts_centre",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 352610332,
+   "name": "沙面公园",
+   "name_en": "Shamian Park",
+   "lat": 23.108364,
+   "lng": 113.239534,
+   "source_url": "https://www.openstreetmap.org/way/352610332",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "沙面公园",
+    "name:en": "Shamian Park",
+    "name:zh": "沙面公园",
+    "leisure": "park"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 361874090,
+   "name": "光孝寺",
+   "name_en": "Guangxiao Temple",
+   "lat": 23.131886,
+   "lng": 113.251489,
+   "source_url": "https://www.openstreetmap.org/way/361874090",
+   "primary_tag": "amenity=place_of_worship",
+   "tags": {
+    "name": "光孝寺",
+    "name:en": "Guangxiao Temple",
+    "name:zh": "光孝寺",
+    "addr:district": "越秀区",
+    "addr:street": "光孝路",
+    "addr:city": "广州市",
+    "amenity": "place_of_worship",
+    "religion": "buddhist",
+    "wikipedia": "zh:光孝寺 (广州)",
+    "wikidata": "Q985779"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 397406259,
+   "name": "小洲村礼堂",
+   "name_en": null,
+   "lat": 23.063812,
+   "lng": 113.353152,
+   "source_url": "https://www.openstreetmap.org/way/397406259",
+   "primary_tag": "amenity=community_centre",
+   "tags": {
+    "name": "小洲村礼堂",
+    "name:zh": "小洲村礼堂",
+    "addr:district": "海珠区",
+    "addr:street": "小洲村拱北大街",
+    "addr:city": "广州市",
+    "amenity": "community_centre"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 422551795,
+   "name": "黄埔军校旧址纪念馆",
+   "name_en": "Memorial of the Original Site of Whampoa Military Academy",
+   "lat": 23.088568,
+   "lng": 113.42031,
+   "source_url": "https://www.openstreetmap.org/way/422551795",
+   "primary_tag": "tourism=museum",
+   "tags": {
+    "name": "黄埔军校旧址纪念馆",
+    "name:en": "Memorial of the Original Site of Whampoa Military Academy",
+    "name:zh": "黄埔军校旧址纪念馆",
+    "addr:street": "军校路",
+    "tourism": "museum",
+    "wikipedia": "zh:黄埔军校旧址",
+    "wikidata": "Q11177237"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 441794072,
+   "name": "白云山风景区售票处",
+   "name_en": null,
+   "lat": 23.199383,
+   "lng": 113.281485,
+   "source_url": "https://www.openstreetmap.org/way/441794072",
+   "primary_tag": "shop=ticket",
+   "tags": {
+    "name": "白云山风景区售票处",
+    "name:zh": "白云山风景区售票处",
+    "shop": "ticket"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 499814088,
+   "name": "沙湾古镇",
+   "name_en": "ShaWan Ancient Town",
+   "lat": 22.904686,
+   "lng": 113.3317,
+   "source_url": "https://www.openstreetmap.org/way/499814088",
+   "primary_tag": "tourism=attraction",
+   "tags": {
+    "name": "沙湾古镇",
+    "name:en": "ShaWan Ancient Town",
+    "name:zh": "沙湾古镇",
+    "tourism": "attraction"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 509641350,
+   "name": "沙面体育俱乐部",
+   "name_en": null,
+   "lat": 23.108481,
+   "lng": 113.241263,
+   "source_url": "https://www.openstreetmap.org/way/509641350",
+   "primary_tag": "leisure=sports_centre",
+   "tags": {
+    "name": "沙面体育俱乐部",
+    "name:zh": "沙面体育俱乐部",
+    "leisure": "sports_centre"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 509641361,
+   "name": "基督教沙面会堂",
+   "name_en": "Shamian Christian Church",
+   "lat": 23.109613,
+   "lng": 113.236282,
+   "source_url": "https://www.openstreetmap.org/way/509641361",
+   "primary_tag": "amenity=place_of_worship",
+   "tags": {
+    "name": "基督教沙面会堂",
+    "name:en": "Shamian Christian Church",
+    "name:zh": "基督教沙面堂",
+    "addr:street": "沙面南街",
+    "amenity": "place_of_worship",
+    "religion": "christian",
+    "wikipedia": "en:Shamian Christian Church",
+    "wikidata": "Q11140825"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 511132876,
+   "name": "1站台/嘉禾望岗方向/下站：越秀公园",
+   "name_en": null,
+   "lat": 23.135127,
+   "lng": 113.258094,
+   "source_url": "https://www.openstreetmap.org/way/511132876",
+   "primary_tag": "railway=platform",
+   "tags": {
+    "name": "1站台/嘉禾望岗方向/下站：越秀公园",
+    "name:zh": "1站台/嘉禾望岗方向/下站：越秀公园",
+    "opening_hours": "06:09-24:04"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 520935699,
+   "name": "陈家祠",
+   "name_en": "Chen Clan Ancestral Hall",
+   "lat": 23.129828,
+   "lng": 113.240133,
+   "source_url": "https://www.openstreetmap.org/way/520935699",
+   "primary_tag": "tourism=museum",
+   "tags": {
+    "name": "陈家祠",
+    "name:en": "Chen Clan Ancestral Hall",
+    "name:zh": "陈家祠",
+    "tourism": "museum",
+    "wikipedia": "zh:陳家祠",
+    "wikidata": "Q5090739",
+    "fee": "yes",
+    "charge": "10 CNY"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 520935700,
+   "name": "陈家祠广场",
+   "name_en": "Chen Clan Ancestral Hall Square",
+   "lat": 23.128857,
+   "lng": 113.239938,
+   "source_url": "https://www.openstreetmap.org/way/520935700",
+   "primary_tag": "place=square",
+   "tags": {
+    "name": "陈家祠广场",
+    "name:en": "Chen Clan Ancestral Hall Square",
+    "name:zh": "陈家祠广场"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 536563299,
+   "name": "沙面小学",
+   "name_en": "Shamian Elementary School",
+   "lat": 23.115416,
+   "lng": 113.228064,
+   "source_url": "https://www.openstreetmap.org/way/536563299",
+   "primary_tag": "amenity=school",
+   "tags": {
+    "name": "沙面小学",
+    "name:en": "Shamian Elementary School",
+    "name:zh": "沙面小学",
+    "amenity": "school",
+    "wheelchair": "limited"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 542890833,
+   "name": "石室圣心大教堂",
+   "name_en": "Sacred Heart Cathedral",
+   "lat": 23.117388,
+   "lng": 113.254735,
+   "source_url": "https://www.openstreetmap.org/way/542890833",
+   "primary_tag": "amenity=place_of_worship",
+   "tags": {
+    "name": "石室圣心大教堂",
+    "name:en": "Sacred Heart Cathedral",
+    "name:zh": "石室圣心大教堂",
+    "addr:city": "广州市",
+    "amenity": "place_of_worship",
+    "religion": "christian",
+    "wikipedia": "zh:石室圣心大教堂",
+    "wikidata": "Q1195445"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 549100647,
+   "name": "白云山制药厂公交站场",
+   "name_en": null,
+   "lat": 23.204133,
+   "lng": 113.31823,
+   "source_url": "https://www.openstreetmap.org/way/549100647",
+   "primary_tag": "amenity=bus_station",
+   "tags": {
+    "name": "白云山制药厂公交站场",
+    "name:zh": "白云山制药厂公交站场",
+    "amenity": "bus_station"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 577612600,
+   "name": "华南植物园西门停车场",
+   "name_en": null,
+   "lat": 23.179658,
+   "lng": 113.354509,
+   "source_url": "https://www.openstreetmap.org/way/577612600",
+   "primary_tag": "amenity=parking",
+   "tags": {
+    "name": "华南植物园西门停车场",
+    "name:zh": "华南植物园西门停车场",
+    "amenity": "parking"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 604389577,
+   "name": "南海神庙",
+   "name_en": "Nanhai God Temple",
+   "lat": 23.08377,
+   "lng": 113.492156,
+   "source_url": "https://www.openstreetmap.org/way/604389577",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "南海神庙",
+    "name:en": "Nanhai God Temple",
+    "name:zh": "南海神庙",
+    "leisure": "park"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 604400712,
+   "name": "宝墨园",
+   "name_en": "Baomo Garden",
+   "lat": 22.897123,
+   "lng": 113.288974,
+   "source_url": "https://www.openstreetmap.org/way/604400712",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "宝墨园",
+    "name:en": "Baomo Garden",
+    "name:zh": "宝墨园",
+    "leisure": "park"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 616584068,
+   "name": "泮溪酒家",
+   "name_en": "Panxi Restaurant",
+   "lat": 23.124027,
+   "lng": 113.230715,
+   "source_url": "https://www.openstreetmap.org/way/616584068",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "泮溪酒家",
+    "name:en": "Panxi Restaurant",
+    "name:zh": "泮溪酒家",
+    "amenity": "restaurant",
+    "cuisine": "chinese",
+    "wikipedia": "zh:泮溪酒家",
+    "wikidata": "Q11144772"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 620330287,
+   "name": "2站台/广州塔方向/下站：广州塔",
+   "name_en": null,
+   "lat": 23.114052,
+   "lng": 113.318684,
+   "source_url": "https://www.openstreetmap.org/way/620330287",
+   "primary_tag": "railway=platform",
+   "tags": {
+    "name": "2站台/广州塔方向/下站：广州塔",
+    "name:zh": "2站台/广州塔方向/下站：广州塔"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 672658329,
+   "name": "广州酒家",
+   "name_en": "Guangzhou Restaurant",
+   "lat": 23.105311,
+   "lng": 113.24118,
+   "source_url": "https://www.openstreetmap.org/way/672658329",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "广州酒家",
+    "name:en": "Guangzhou Restaurant",
+    "name:zh": "广州酒家",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 682108182,
+   "name": "广州博物馆",
+   "name_en": "Guangzhou Municipal Museum",
+   "lat": 23.140419,
+   "lng": 113.26042,
+   "source_url": "https://www.openstreetmap.org/way/682108182",
+   "primary_tag": "tourism=museum",
+   "tags": {
+    "name": "广州博物馆",
+    "name:en": "Guangzhou Municipal Museum",
+    "name:zh": "广州博物馆",
+    "opening_hours": "Tu-Su 09:00-18:00",
+    "website": "https://www.guangzhoumuseum.cn",
+    "phone": "+86 20 8355 0627",
+    "tourism": "museum",
+    "wikipedia": "zh:广州博物馆",
+    "wikidata": "Q30941307",
+    "fee": "yes"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 699238369,
+   "name": "广州滨江东路广州塔亚朵酒店",
+   "name_en": null,
+   "lat": 23.105433,
+   "lng": 113.303335,
+   "source_url": "https://www.openstreetmap.org/way/699238369",
+   "primary_tag": "tourism=hotel",
+   "tags": {
+    "name": "广州滨江东路广州塔亚朵酒店",
+    "phone": "+86 (20) 8963 2688",
+    "addr:street": "滨江东路",
+    "tourism": "hotel"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 816900706,
+   "name": "1站台/滘心方向/下站：陈家祠",
+   "name_en": null,
+   "lat": 23.120651,
+   "lng": 113.241952,
+   "source_url": "https://www.openstreetmap.org/way/816900706",
+   "primary_tag": "railway=platform",
+   "tags": {
+    "name": "1站台/滘心方向/下站：陈家祠",
+    "name:zh": "1站台/滘心方向/下站：陈家祠"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 823098226,
+   "name": "广州塔篮球公园",
+   "name_en": null,
+   "lat": 23.108902,
+   "lng": 113.324309,
+   "source_url": "https://www.openstreetmap.org/way/823098226",
+   "primary_tag": "leisure=pitch",
+   "tags": {
+    "name": "广州塔篮球公园",
+    "leisure": "pitch"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 847909993,
+   "name": "广州艺术博物院",
+   "name_en": "Guangzhou Museum of Art",
+   "lat": 23.103723,
+   "lng": 113.320744,
+   "source_url": "https://www.openstreetmap.org/way/847909993",
+   "primary_tag": "tourism=gallery",
+   "tags": {
+    "name": "广州艺术博物院",
+    "name:en": "Guangzhou Museum of Art",
+    "name:zh": "广州艺术博物院",
+    "opening_hours": "Tu-Su,PH 09:00-17:30",
+    "tourism": "gallery",
+    "wikidata": "Q25378279",
+    "fee": "no"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 909299655,
+   "name": "广场",
+   "name_en": null,
+   "lat": 22.766724,
+   "lng": 113.91936,
+   "source_url": "https://www.openstreetmap.org/way/909299655",
+   "primary_tag": "place=square",
+   "tags": {
+    "name": "广场"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 929617468,
+   "name": "孙中山纪念堂公园",
+   "name_en": null,
+   "lat": 22.524867,
+   "lng": 113.370305,
+   "source_url": "https://www.openstreetmap.org/way/929617468",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "孙中山纪念堂公园",
+    "leisure": "park"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 941034468,
+   "name": "天河城百货",
+   "name_en": null,
+   "lat": 23.124525,
+   "lng": 113.39921,
+   "source_url": "https://www.openstreetmap.org/way/941034468",
+   "primary_tag": "shop=mall",
+   "tags": {
+    "name": "天河城百货",
+    "shop": "mall"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 944348111,
+   "name": "广州酒家",
+   "name_en": "Guangzhou Restaurant",
+   "lat": 23.116537,
+   "lng": 113.240558,
+   "source_url": "https://www.openstreetmap.org/way/944348111",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "广州酒家",
+    "name:en": "Guangzhou Restaurant",
+    "name:zh": "广州酒家",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 947834710,
+   "name": "沙面小学(柏悦湾校区)",
+   "name_en": null,
+   "lat": 23.121604,
+   "lng": 113.21689,
+   "source_url": "https://www.openstreetmap.org/way/947834710",
+   "primary_tag": "amenity=school",
+   "tags": {
+    "name": "沙面小学(柏悦湾校区)",
+    "amenity": "school"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1078865557,
+   "name": "广州十三行博物馆",
+   "name_en": "Guangzhou Thirteen Hongs Museum",
+   "lat": 23.111635,
+   "lng": 113.245583,
+   "source_url": "https://www.openstreetmap.org/way/1078865557",
+   "primary_tag": "tourism=museum",
+   "tags": {
+    "name": "广州十三行博物馆",
+    "name:en": "Guangzhou Thirteen Hongs Museum",
+    "tourism": "museum",
+    "wikipedia": "zh:广州十三行博物馆"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1150891472,
+   "name": "南海神庙",
+   "name_en": null,
+   "lat": 23.083037,
+   "lng": 113.491208,
+   "source_url": "https://www.openstreetmap.org/way/1150891472",
+   "primary_tag": "historic=city_gate",
+   "tags": {
+    "name": "南海神庙",
+    "historic": "city_gate"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1191456450,
+   "name": "荔湾博物馆",
+   "name_en": "Liwan Museum",
+   "lat": 23.12242,
+   "lng": 113.230533,
+   "source_url": "https://www.openstreetmap.org/way/1191456450",
+   "primary_tag": "tourism=museum",
+   "tags": {
+    "name": "荔湾博物馆",
+    "name:en": "Liwan Museum",
+    "tourism": "museum"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1313608063,
+   "name": "沙面小学",
+   "name_en": "Shamian Primary School",
+   "lat": 23.11011,
+   "lng": 113.240131,
+   "source_url": "https://www.openstreetmap.org/way/1313608063",
+   "primary_tag": "amenity=school",
+   "tags": {
+    "name": "沙面小学",
+    "name:en": "Shamian Primary School",
+    "name:zh": "沙面小学",
+    "amenity": "school"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1333507426,
+   "name": "广东科学中心",
+   "name_en": "Guangdong Science Center",
+   "lat": 23.041995,
+   "lng": 113.35669,
+   "source_url": "https://www.openstreetmap.org/way/1333507426",
+   "primary_tag": "tourism=museum",
+   "tags": {
+    "name": "广东科学中心",
+    "name:en": "Guangdong Science Center",
+    "name:zh": "广东科学中心",
+    "opening_hours": "Mo off; Tu-Fr 09:30-16:30; Sa-Su,PH 09:30-17:00",
+    "addr:street": "科普路",
+    "tourism": "museum",
+    "wikipedia": "zh:广东科学中心",
+    "wikidata": "Q26996788",
+    "fee": "no",
+    "wheelchair": "yes"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1350298173,
+   "name": "岭南印象园正门停车场",
+   "name_en": "Parking Lot of the Main Entrance of Lingnan Impression Garden",
+   "lat": 23.040402,
+   "lng": 113.402355,
+   "source_url": "https://www.openstreetmap.org/way/1350298173",
+   "primary_tag": "amenity=parking",
+   "tags": {
+    "name": "岭南印象园正门停车场",
+    "name:en": "Parking Lot of the Main Entrance of Lingnan Impression Garden",
+    "name:zh": "岭南印象园正门停车场",
+    "amenity": "parking",
+    "fee": "yes"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1415443404,
+   "name": "西岸海心沙",
+   "name_en": null,
+   "lat": 22.998141,
+   "lng": 112.98048,
+   "source_url": "https://www.openstreetmap.org/way/1415443404",
+   "primary_tag": "place=islet",
+   "tags": {
+    "name": "西岸海心沙"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1415443405,
+   "name": "高海海心沙",
+   "name_en": null,
+   "lat": 23.047714,
+   "lng": 112.946175,
+   "source_url": "https://www.openstreetmap.org/way/1415443405",
+   "primary_tag": "natural=wood",
+   "tags": {
+    "name": "高海海心沙",
+    "natural": "wood"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1465318040,
+   "name": "白云山索道售票处",
+   "name_en": "Baiyun Cableway Ticket Office",
+   "lat": 23.159074,
+   "lng": 113.289631,
+   "source_url": "https://www.openstreetmap.org/way/1465318040",
+   "primary_tag": "shop=ticket",
+   "tags": {
+    "name": "白云山索道售票处",
+    "name:en": "Baiyun Cableway Ticket Office",
+    "shop": "ticket",
+    "fee": "yes"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1494631333,
+   "name": "广州塔广场",
+   "name_en": null,
+   "lat": 23.106563,
+   "lng": 113.319118,
+   "source_url": "https://www.openstreetmap.org/way/1494631333",
+   "primary_tag": "shop=mall",
+   "tags": {
+    "name": "广州塔广场",
+    "shop": "mall"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1523898842,
+   "name": "余荫山房",
+   "name_en": "Yuyin Shanfang",
+   "lat": 23.013924,
+   "lng": 113.390193,
+   "source_url": "https://www.openstreetmap.org/way/1523898842",
+   "primary_tag": "tourism=attraction",
+   "tags": {
+    "name": "余荫山房",
+    "name:en": "Yuyin Shanfang",
+    "name:zh": "余荫山房",
+    "opening_hours": "Mo-Su 08:00-17:00, 17:00-18:00 open \"entrance closed\"",
+    "website": "https://www.yuyinshanfang.com/",
+    "phone": "+86 20 3482 2187",
+    "addr:district": "番禺区",
+    "addr:street": "北大街",
+    "addr:city": "广州市",
+    "historic": "yes",
+    "heritage": "2",
+    "tourism": "attraction",
+    "leisure": "garden",
+    "wikipedia": "zh:余荫山房",
+    "wikidata": "Q10886663",
+    "fee": "yes",
+    "charge": "18 CNY",
+    "description": "岭南古典园林，广东四大名园之一，全国重点文物保护单位。",
+    "description:zh": "岭南古典园林，广东四大名园之一，全国重点文物保护单位。"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1529560860,
+   "name": "广州酒家",
+   "name_en": "Guangzhou Restaurant",
+   "lat": 23.369652,
+   "lng": 113.314871,
+   "source_url": "https://www.openstreetmap.org/way/1529560860",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "广州酒家",
+    "name:en": "Guangzhou Restaurant",
+    "name:zh": "广州酒家",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "way",
+   "osm_id": 1529561249,
+   "name": "广州酒家",
+   "name_en": "Guangzhou Restaurant",
+   "lat": 23.369454,
+   "lng": 113.314926,
+   "source_url": "https://www.openstreetmap.org/way/1529561249",
+   "primary_tag": "amenity=restaurant",
+   "tags": {
+    "name": "广州酒家",
+    "name:en": "Guangzhou Restaurant",
+    "name:zh": "广州酒家",
+    "amenity": "restaurant",
+    "cuisine": "cantonese;dim_sum"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 6679655,
+   "name": "沙面",
+   "name_en": "Shameen",
+   "lat": 23.109481,
+   "lng": 113.239274,
+   "source_url": "https://www.openstreetmap.org/relation/6679655",
+   "primary_tag": "tourism=attraction",
+   "tags": {
+    "name": "沙面",
+    "name:en": "Shameen",
+    "tourism": "attraction",
+    "wikipedia": "zh:沙面岛",
+    "wikidata": "Q529977"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 8249243,
+   "name": "白云山风景名胜区",
+   "name_en": "Baiyun (White Cloud) Mountain Scenic Landscape Area",
+   "lat": 23.189621,
+   "lng": 113.29217,
+   "source_url": "https://www.openstreetmap.org/relation/8249243",
+   "primary_tag": "leisure=nature_reserve",
+   "tags": {
+    "name": "白云山风景名胜区",
+    "name:en": "Baiyun (White Cloud) Mountain Scenic Landscape Area",
+    "leisure": "nature_reserve"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 8499873,
+   "name": "中山纪念堂",
+   "name_en": "Sun Yat-sen Memorial Hall",
+   "lat": 23.135588,
+   "lng": 113.259354,
+   "source_url": "https://www.openstreetmap.org/relation/8499873",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "中山纪念堂",
+    "name:en": "Sun Yat-sen Memorial Hall",
+    "name:zh": "中山纪念堂",
+    "opening_hours": "06:00-22:00",
+    "website": "http://www.zs-hall.cn",
+    "phone": "+86 020 8356 7966",
+    "addr:street": "东风中路",
+    "leisure": "park"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 9085549,
+   "name": "中国科学院华南植物园科研区",
+   "name_en": "South China Botanical Garden of Chinese Academy of Sciences",
+   "lat": 23.178417,
+   "lng": 113.351299,
+   "source_url": "https://www.openstreetmap.org/relation/9085549",
+   "primary_tag": "amenity=research_institute",
+   "tags": {
+    "name": "中国科学院华南植物园科研区",
+    "name:en": "South China Botanical Garden of Chinese Academy of Sciences",
+    "name:zh": "中国科学院华南植物园科研区",
+    "amenity": "research_institute"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 9170019,
+   "name": "大夫山森林公园",
+   "name_en": "Dafushan Forest Park",
+   "lat": 22.954738,
+   "lng": 113.303116,
+   "source_url": "https://www.openstreetmap.org/relation/9170019",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "大夫山森林公园",
+    "name:en": "Dafushan Forest Park",
+    "name:zh": "大夫山森林公园",
+    "leisure": "park",
+    "wikidata": "Q10934711"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 9815225,
+   "name": "二沙岛艺术广场",
+   "name_en": null,
+   "lat": 23.112831,
+   "lng": 113.3143,
+   "source_url": "https://www.openstreetmap.org/relation/9815225",
+   "primary_tag": "place=square",
+   "tags": {
+    "name": "二沙岛艺术广场"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 10076268,
+   "name": "白云山",
+   "name_en": null,
+   "lat": 23.189621,
+   "lng": 113.29217,
+   "source_url": "https://www.openstreetmap.org/relation/10076268",
+   "primary_tag": "natural=wood",
+   "tags": {
+    "name": "白云山",
+    "natural": "wood"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 12122143,
+   "name": "云台花园",
+   "name_en": "Yuntai Garden",
+   "lat": 23.159657,
+   "lng": 113.288273,
+   "source_url": "https://www.openstreetmap.org/relation/12122143",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "云台花园",
+    "name:en": "Yuntai Garden",
+    "name:zh": "云台花园",
+    "opening_hours": "Mo-Su 08:00-18:00",
+    "website": "https://www.baiyunshan.com.cn/ythy/index.shtml",
+    "addr:district": "越秀区",
+    "addr:street": "广园中路",
+    "addr:city": "广州市",
+    "leisure": "park",
+    "wikipedia": "zh:雲台花園",
+    "wikidata": "Q32155539",
+    "fee": "yes",
+    "charge": "10 CNY"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 12569904,
+   "name": "孙中山纪念堂",
+   "name_en": null,
+   "lat": 22.525459,
+   "lng": 113.370365,
+   "source_url": "https://www.openstreetmap.org/relation/12569904",
+   "primary_tag": "tourism=museum",
+   "tags": {
+    "name": "孙中山纪念堂",
+    "historic": "monument",
+    "tourism": "museum"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 13757175,
+   "name": "莲花山旅游区",
+   "name_en": null,
+   "lat": 22.990537,
+   "lng": 113.497039,
+   "source_url": "https://www.openstreetmap.org/relation/13757175",
+   "primary_tag": "tourism=attraction",
+   "tags": {
+    "name": "莲花山旅游区",
+    "tourism": "attraction"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 17329559,
+   "name": "海心沙",
+   "name_en": null,
+   "lat": 22.737196,
+   "lng": 113.145915,
+   "source_url": "https://www.openstreetmap.org/relation/17329559",
+   "primary_tag": "place=island",
+   "tags": {
+    "name": "海心沙"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 18283503,
+   "name": "广东科学中心",
+   "name_en": "Guangdong Science Center",
+   "lat": 23.042295,
+   "lng": 113.356512,
+   "source_url": "https://www.openstreetmap.org/relation/18283503",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "广东科学中心",
+    "name:en": "Guangdong Science Center",
+    "name:zh": "广东科学中心",
+    "leisure": "park"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 20047289,
+   "name": "岭南印象园",
+   "name_en": "Lingnan Impression",
+   "lat": 23.038156,
+   "lng": 113.400035,
+   "source_url": "https://www.openstreetmap.org/relation/20047289",
+   "primary_tag": "leisure=park",
+   "tags": {
+    "name": "岭南印象园",
+    "name:en": "Lingnan Impression",
+    "name:zh": "岭南印象园",
+    "addr:street": "大学城外环西路",
+    "leisure": "park"
+   }
+  },
+  {
+   "osm_type": "relation",
+   "osm_id": 21116680,
+   "name": "广州白云山医院",
+   "name_en": "Guangzhou Baiyunshan Hospital",
+   "lat": 23.20496,
+   "lng": 113.318233,
+   "source_url": "https://www.openstreetmap.org/relation/21116680",
+   "primary_tag": "amenity=hospital",
+   "tags": {
+    "name": "广州白云山医院",
+    "name:en": "Guangzhou Baiyunshan Hospital",
+    "name:zh": "广州白云山医院",
+    "amenity": "hospital"
+   }
+  }
+ ]
 }

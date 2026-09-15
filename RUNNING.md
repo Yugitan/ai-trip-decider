@@ -161,21 +161,30 @@ make cost           # 成本报告（产物 docs/COST_REPORT.md）
 | Makefile 目标 | 用途 | 实测 |
 | --- | --- | --- |
 | `make seed` | 灌入地点 + 关系 + 路线 | 约 12 秒，幂等 |
-| `make validate` | 知识库质检闸门 | **exit=0**（0 个阻断项失败；告警：营业时间未知 89.8%、身份可交叉核验 9.8%、district 5/10） |
+| `make validate` | 知识库质检闸门 | **exit=0**（0 个阻断项失败；告警：营业时间未知 83.9%、长期目标身份可交叉核验 17.1%/30%） |
 | `make relations` | 重算地点关系图 | 离线估算；`OSRM=1` 走真实路网 |
 | `make cost` | 成本报告 | 产物 `docs/COST_REPORT.md` |
 | `make report` | 依赖 `validate` | 产物 `docs/DATA_REPORT.md` |
 
 `make validate` 是**发布闸门**：门槛不达标会非零退出，不要用跳过它的方式"让 CI 变绿"。
 
-原始 OSM 数据（`backend/data/raw/osm_guangzhou_*.json`，约 3.8MB）**已入库**
-（`.gitignore` 里对这两份 JSON 做了例外），所以 clone 下来 seed 与集成测试都能直接跑，
-不需要先跑 9 分钟的抓取。代价：`make fetch-osm` 重跑会改动这两份已跟踪的文件。
-想重建原始数据时（约 9 分钟，需要网络、且依赖 Overpass 可用）：
+原始 OSM 数据（`backend/data/raw/osm_guangzhou_*.json`，三份共约 4.4MB）**已入库**
+（`.gitignore` 里对这三份 JSON 做了例外），所以 clone 下来 seed 与集成测试都能直接跑，
+不需要先跑 9 分钟的抓取。代价：重跑抓取会改动这些已跟踪的文件。
 
-```bash
-make fetch-osm
-```
+三份各自负责什么（`seed_guangzhou.load_raw_records` 按 `osm_guangzhou_*.json` 通配读取，
+所以新增一份不需要改建库代码）：
+
+| 文件 | 内容 | 重跑方式 |
+| --- | --- | --- |
+| `osm_guangzhou_raw.json` | 主体 5 个分组（景点/自然/餐饮购物/公共/交通） | `make fetch-osm`（约 9 分钟） |
+| `osm_guangzhou_curated_extras.json` | 按人工清单定向补抓的街区/岛屿/村落（B1） | `cd backend && PYTHONPATH=. uv run python scripts/fetch_osm_curated_extras.py` |
+| `osm_guangzhou_transport.json` | 交通枢纽（B2），逐取值查询 | `cd backend && PYTHONPATH=. uv run python scripts/fetch_osm_transport.py` |
+
+抓取依赖 Overpass 镜像。2026-09-15 实测：`overpass-api.de` 对本机稳定返回 **HTTP 406**、
+`overpass.kumi.systems` 连接超时，只有 **`maps.mail.ru`** 可用（全部 8 个候选的实测结果
+记在 `backend/scripts/fetch_osm_guangzhou.py` 的 `MIRRORS` 上方注释里）。
+镜像全挂时脚本会**拒绝返回空数据**并报错 —— 把「镜像故障」当成「该类别没有数据」会污染整个知识库。
 
 改完 `config/*.yaml`（评分权重、过滤规则、单价）或 `backend/data/curated/*.yaml`（人工数据）后的标准动作：
 
@@ -195,6 +204,19 @@ make db-drop CONFIRM=yes
 ```
 
 `make db-reset` 里有一个刻意的顺序：**关系图必须在地点之后算**（`place_relations` 对 `places` 是级联删除）。
+
+⚠️ **数据变更后重建开发库会撞上一道刻意设计的拦阻**：`make seed` 在「已有行程引用本地点的数据」时
+会直接拒绝（`trip_route_stops.place_id → places.id` 是 **`RESTRICT`** 外键 —— 重建会重新编号地点，
+旧引用就会指向别的地点）。正确做法是先留退路再重建：
+
+```bash
+pg_dump -h 127.0.0.1 -U "$(whoami)" -d tripdecider_dev > /tmp/tripdecider_dev_$(date +%Y%m%d_%H%M%S).sql
+cd backend && PYTHONPATH=. uv run python scripts/seed_guangzhou.py --force   # 会先删该城市的行程
+make relations OSRM=1
+make validate
+```
+
+想恢复：`psql -h 127.0.0.1 -U "$(whoami)" -d tripdecider_dev -f /tmp/tripdecider_dev_*.sql`。
 
 ---
 

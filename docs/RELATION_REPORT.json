@@ -1,10 +1,13 @@
 {
-  "selected_places": 600,
+  "selected_places": 800,
   "route_places_included": 51,
-  "candidate_pairs": 3350,
-  "written": 3350,
+  "candidate_pairs": 5445,
+  "osrm_pairs": 163,
+  "estimated_pairs": 5282,
+  "written": 5445,
   "data_source_counts": {
-    "estimated": 3350
+    "estimated": 5282,
+    "osrm": 163
   },
-  "elapsed_s": 0.7
+  "elapsed_s": 25.1
 }

@@ -99,6 +99,14 @@ migrate-check: ## 校验 models 与迁移是否一致（不一致会失败）
 fetch-osm: ## 抓取广州 OSM 真实 POI 原始数据
 	cd $(BACKEND) && $(SCRIPT_ENV) $(UV) run python scripts/fetch_osm_guangzhou.py
 
+.PHONY: fetch-extras
+fetch-extras: ## 定向补抓人工清单里的街区/岛屿/村落（B1 缺口）
+	cd $(BACKEND) && $(SCRIPT_ENV) $(UV) run python scripts/fetch_osm_curated_extras.py
+
+.PHONY: fetch-transport
+fetch-transport: ## 定向补抓交通枢纽：地铁站/公交站/轮渡（B2 缺口）
+	cd $(BACKEND) && $(SCRIPT_ENV) $(UV) run python scripts/fetch_osm_transport.py
+
 .PHONY: seed
 seed: ## 幂等灌入广州知识库（地点 + 关系 + 路线）
 	cd $(BACKEND) && $(SCRIPT_ENV) $(UV) run python scripts/seed_guangzhou.py

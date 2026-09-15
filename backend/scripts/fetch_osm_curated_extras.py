@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     elements = payload.get("elements", [])
     print(f"  {mirror.split('/')[2]} 返回 {len(elements)} 个元素")
 
-    # None 表示"该键取任意值"（见 fetch_osm_guangzhou.filter_expr 的定义）
+    # None 表示"该键取任意值"（见 fetch_osm_guangzhou.value_filters 的定义）
     any_value: tuple[str, ...] | None = None
     specs: list[tuple[str, tuple[str, ...] | None]] = [
         ("tourism", any_value),
