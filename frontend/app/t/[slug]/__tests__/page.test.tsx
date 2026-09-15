@@ -17,6 +17,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import SharedTripPage, { generateMetadata } from "@/app/t/[slug]/page";
 import { ApiError, NetworkError, getSharedTrip, type TripOut } from "@/lib/api";
 
+// 页内嵌的「复制这套路线」是客户端组件，用 `useRouter` 跳转 —— 单测里没有 App Router
+// 上下文，给一个最小替身即可（这一页该验证的是"它被渲染出来了"，不重复测它怎么跳）。
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
   return { ...actual, getSharedTrip: vi.fn() };
@@ -132,6 +136,18 @@ describe("分享页", () => {
       "href",
       "/#planner",
     );
+    // 复制入口在这里（唯一一条从"别人的行程"走到"我自己的行程"的路）
+    expect(screen.getByRole("button", { name: "复制这套路线" })).toBeInTheDocument();
+  });
+
+  it("读不到行程时不给一个只会失败的复制按钮", async () => {
+    getSharedTripMock.mockRejectedValue(
+      new ApiError({ code: "SHARE_NOT_FOUND", message: "已失效", hint: "", context: {} }, 404, null),
+    );
+
+    await renderPage("gone");
+
+    expect(screen.queryByTestId("copy-trip")).toBeNull();
   });
 
   it("★ 只读：没有任何修改/撤销/分享入口", async () => {
@@ -192,5 +208,53 @@ describe("分享页", () => {
     const metadata = await generateMetadata({ params: Promise.resolve({ slug: "abc" }) });
 
     expect(metadata.title).toBe("这个分享链接不可用");
+  });
+
+  it("★ 读到行程时输出 TouristTrip JSON-LD（AC-9.5）", async () => {
+    getSharedTripMock.mockResolvedValue({ data: TRIP, meta: META });
+
+    await renderPage();
+
+    const script = document.querySelector('script[type="application/ld+json"]');
+    expect(script).not.toBeNull();
+    const data = JSON.parse(script!.textContent ?? "") as Record<string, unknown>;
+    expect(data["@type"]).toBe("TouristTrip");
+    expect(data.name).toBe("广州 · 09:00–21:00");
+    expect(data.numDays).toBe(1);
+    expect(data.url).toContain("/t/abc123456789");
+    expect(data.itinerary).toEqual(["1. 点都德（09:00–10:30）"]);
+  });
+
+  it("★ 读不到行程时不输出任何 JSON-LD（空的比没有更糟）", async () => {
+    getSharedTripMock.mockRejectedValue(
+      new ApiError({ code: "SHARE_NOT_FOUND", message: "已失效", hint: "", context: {} }, 404, null),
+    );
+
+    await renderPage("gone");
+
+    expect(document.querySelector('script[type="application/ld+json"]')).toBeNull();
+  });
+
+  it("社交预览的 metadata：openGraph 与 twitter 都带标题（og:image 由文件约定自动补全）", async () => {
+    getSharedTripMock.mockResolvedValue({ data: TRIP, meta: META });
+
+    const metadata = await generateMetadata({ params: Promise.resolve({ slug: "abc" }) });
+
+    expect(metadata.openGraph?.title).toContain("广州 · 09:00–21:00");
+    // Next 的 OpenGraph 类型里 type 是内部字段，运行时存在但类型上不暴露；
+    // 实际输出已在真实冒烟里验证（og:type=article）。
+    expect((metadata.openGraph as Record<string, unknown>)?.type).toBe("article");
+    // 刻意不写 images：实测过 images 数组会顶掉 opengraph-image 文件约定的自动填充
+    expect(metadata.openGraph?.images).toBeUndefined();
+    expect(metadata.twitter?.title).toContain("广州 · 09:00–21:00");
+  });
+
+  it("读不到时社交元数据退到不可用标题，且不索引失效页", async () => {
+    getSharedTripMock.mockRejectedValue(new Error("boom"));
+
+    const metadata = await generateMetadata({ params: Promise.resolve({ slug: "abc" }) });
+
+    expect(metadata.title).toBe("这个分享链接不可用");
+    expect(metadata.robots).toEqual({ index: false, follow: false });
   });
 });

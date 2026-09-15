@@ -10,11 +10,14 @@ import {
   type TripRoute,
   type TripStop,
 } from "@/lib/api";
+import { RouteCompare } from "@/components/route-compare";
 import { RouteMap } from "@/components/route-map";
 import {
   formatArchetype,
+  formatBudget,
   formatDistance,
   formatDuration,
+  formatTransit,
   formatTransport,
   lookupLabel,
 } from "@/lib/format";
@@ -24,6 +27,10 @@ import {
  *
  * 带操作的入口在 `trip-workspace.tsx`（改路线 / 撤销 / 分享），
  * 分享页（`app/t/[slug]`）直接复用这里的 `TripResultView`。
+ *
+ * 多套方案时，列表上方会先出现一张逐项对比表（`components/route-compare.tsx`）——
+ * 卡片负责"每套方案讲完整自己"，表格负责"让三套方案可比"。两处用同一批格式化函数，
+ * 所以同一个数字在表格里和卡片里长得一样。
  *
  * ★ 为什么必须再发一次请求 ★
  * `plan.completed` 这个 SSE 事件里只有**元信息**（方案数 / 是否命中缓存 / 模型用量 / trip_id），
@@ -50,47 +57,6 @@ export const STOP_WARNING_LABELS: Readonly<Record<string, string>> = {
 /** 未知码**原样返回**：后端新增一个校验码时，用户看到乱码好过看到一个编好的说法。 */
 export function formatStopWarning(code: string): string {
   return lookupLabel(STOP_WARNING_LABELS, code) ?? code;
-}
-
-/**
- * 金额字符串 → 展示值。
- *
- * 后端用 Decimal，JSON 里是**字符串**（`"18.32"`）。这里只做尾零收敛（`"20.00"` → `"20"`），
- * 不做任何浮点换算：一旦 `Number()` 之后再 `toFixed()`，就等于在前端重算了一遍钱。
- * 非数值内容原样返回，不猜。
- */
-export function formatAmount(value: string): string {
-  if (!/^\d+(\.\d+)?$/.test(value)) return value;
-  return value.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
-}
-
-/** 预算口径 → 后缀。未知口径返回空串，不硬编一个"每人"上去。 */
-function budgetScopeSuffix(scope: string | null): string {
-  if (scope === "per_person") return "/人";
-  if (scope === "total") return "/总计";
-  return "";
-}
-
-/**
- * 预算区间 → 人话。与 `lib/format.ts` 的 `formatPrice` 同一原则：
- * 只有下限就说「起」，只有上限就说「最多」，两端反了就说「未知」。
- */
-export function formatBudget(
-  min: string | null,
-  max: string | null,
-  scope: string | null,
-): string {
-  const suffix = budgetScopeSuffix(scope);
-  const low = min === null ? null : formatAmount(min);
-  const high = max === null ? null : formatAmount(max);
-  const lowIsAmount = low !== null && /^\d/.test(low);
-  const highIsAmount = high !== null && /^\d/.test(high);
-
-  if (!lowIsAmount && !highIsAmount) return "未知";
-  if (!lowIsAmount) return `最多 ¥${high}${suffix}`;
-  if (!highIsAmount) return `¥${low} 起${suffix}`;
-  if (Number(low) > Number(high)) return "未知";
-  return low === high ? `¥${low}${suffix}` : `¥${low}–${high}${suffix}`;
 }
 
 function StopRow({ stop }: { stop: TripStop }) {
@@ -197,12 +163,7 @@ export function TripRouteCard({ route }: { route: TripRoute }) {
         <div className="flex gap-1.5">
           <dt className="text-ink-faint">交通</dt>
           <dd className="tnum text-ink-soft">
-            {route.transit_time_min === null
-              ? "未知"
-              : `${route.transit_time_min} 分钟`}
-            {route.transit_distance_m === null
-              ? ""
-              : ` · ${formatDistance(route.transit_distance_m)}`}
+            {formatTransit(route.transit_time_min, route.transit_distance_m)}
           </dd>
         </div>
         <div className="flex gap-1.5">
@@ -350,11 +311,15 @@ export function TripResultView({ trip }: { trip: TripOut }) {
           可以调整偏好或放宽限制后重新提交。
         </p>
       ) : (
-        <ol className="mt-4 space-y-4">
-          {trip.routes.map((route) => (
-            <TripRouteCard key={route.id} route={route} />
-          ))}
-        </ol>
+        <>
+          {/* 先对比、再看细节：卡片把每套方案讲完整，表格让它们可比 */}
+          <RouteCompare routes={trip.routes} />
+          <ol className="mt-4 space-y-4">
+            {trip.routes.map((route) => (
+              <TripRouteCard key={route.id} route={route} />
+            ))}
+          </ol>
+        </>
       )}
 
     </div>
@@ -406,6 +371,27 @@ export function describeFailure(error: unknown, title: string): FailureInfo {
     hint: "可以重试。",
     detail: null,
   };
+}
+
+/**
+ * 失败块：标题 / 说明 / 细节 / 提示，四行都给出来，不吞信息。
+ *
+ * 放在这里而不是各个组件里：结果面板、复制行程、行程页面失败时显示的是**同一件事**，
+ * 三份拷贝迟早会漂移成三种说法（而"错误怎么呈现"恰恰是这个项目最不该走样的一块）。
+ */
+export function FailureBlock({ failure }: { failure: FailureInfo }) {
+  return (
+    <>
+      <p className="text-sm font-semibold text-ink">{failure.title}</p>
+      <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{failure.message}</p>
+      {failure.detail === null ? null : (
+        <p className="tnum mt-1 text-xs text-ink-soft">{failure.detail}</p>
+      )}
+      {failure.hint === null ? null : (
+        <p className="mt-1 text-xs leading-relaxed text-ink-soft">{failure.hint}</p>
+      )}
+    </>
+  );
 }
 
 /** 取回行程的三个状态 + 重试。 */

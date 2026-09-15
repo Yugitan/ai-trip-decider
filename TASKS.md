@@ -1,9 +1,11 @@
 # TASKS.md — 任务清单与完成状态
 
-> 最后更新：2026-09-14
-> 当前进度：**M0 脚手架 + M1 广州知识库 + M2 领域内核 + M3 Provider 与检索链 + M4 规划编排与 API 已完成；
-> M5 前端结果页进行中**（首页提交 → 三套方案时间线 → 改路线 / 撤销 / 分享 / 地图已可用；
-> 地图需配 `NEXT_PUBLIC_AMAP_JS_KEY`；还剩方案对比视图、结果页自己的 URL）（M5–M8 见 `PRD.md` §27）
+> 最后更新：2026-09-15
+> 当前进度：**M0–M5 全部完成**（M0 脚手架 + M1 广州知识库 + M2 领域内核 +
+> M3 Provider 与检索链 + M4 规划编排与 API + **M5 前端结果页**：首页提交 → 三套方案时间线 /
+> 逐项对比表 → `/trip/{id}` 独立结果页 → 改路线 / 撤销 / 分享 / 分享页「复制这套路线」 /
+> 地图（需配 `NEXT_PUBLIC_AMAP_JS_KEY`）→ **分享页 OG 图 + JSON-LD（AC-9.5）**）。
+> 下一步：M6（数据缺口，等 Overpass）/ M7（E2E + 性能）/ M8（交付报告）。
 
 状态图例：✅ 完成并已验证 · 🟡 部分完成 · ⏳ 未开始 · ⛔ 被外部条件阻塞
 
@@ -148,7 +150,7 @@
 | B5 | 路线预算留空 | 🟡 | 没有可靠的餐饮/门票价格来源，**刻意不填估算值**（有测试守住） |
 | B6 | 营业时间结构化解析 | ⏳ | `opening_hours_raw` 原文已存，`opening_hours` 列留 NULL 并记入 `unknown_fields`；解析器属 M2 |
 | B7 | 第三方 Key 的真实调用验证 | 🟡 部分解除 | **DeepSeek**：M4 已实跑（11 次真实调用，见 `docs/COST_REPORT.md`）。**Tavily**：2026-09-14 已配 Key 并活体验证（`tests/integration/test_search_live.py`，3 条）。**高德**：拿到的是 **Web端(JS API)** 类型的 Key（实测调 Web服务接口返回 `USERKEY_PLAT_NOMATCH`），已在真实浏览器里验证地图渲染（`RUNNING.md` §8.7）；**后端路由仍缺 Web服务类型的 Key**，`map_provider_effective` 依旧是 `osrm` |
-| B8 | `pricing.yaml` 的 DeepSeek 单价仍是 `null` | 🟡 | 官方价目页 JS 渲染抓不到。影响：成本报表 LLM 一栏只有 token 数、没有金额。**首次真实调用前必须回填**（已写在配置顶部校准流程 + 文件头注释） |
+| ~~B8~~ | ~~`pricing.yaml` 的 DeepSeek 单价仍是 `null`~~ | ✅ 已解决（2026-09-13） | 单价已按官方价目页回填 `deepseek-flash` / `deepseek-v4-pro` 并写 `calibrated_at: "2026-09-13"`（按**高峰价**填，低峰为半价），`meta.llm.cost_calibrated` 因此由 `false` 变 `true`（M4-16），本机 11 次真实调用已产出金额（`docs/COST_REPORT.md`）。**仍未校准的是 `map.amap` / `search.serper` / `search.bing` / `llm.openai` / `llm.anthropic`** —— 「未校准单价金额记 0 且标记不可信」这条路径仍由它们守着（有测试） |
 | ~~B9~~ | ~~前端覆盖率提供商装不上~~ | ✅ 已解决 | `pnpm add -D @vitest/coverage-v8@3.2.4` 装上了；`make test-frontend-cov` 现在真出报告（98.56%）并带闸门，已接进 `make check` |
 
 ## 环境适配（非代码问题，需知悉）
@@ -261,6 +263,7 @@
   不会把错误数据当真实数据用。
 - **`config/pricing.yaml` 的 DeepSeek 单价仍是 `null`**：官方价目页是 JS 渲染，静态抓不到。
   首次真实调用前必须回填，否则成本报表里 LLM 一栏只有 token 数、没有金额。
+  → **已于 2026-09-13 回填并校准**（M4-16，见 B8）：本条是 M3 当时的事实，不是现状。
 - **L1–L4（城市知识库 / 热门地点 / 路线模板 / 关系图）未在本轮落地**：它们是数据库查询，
   需要规划编排（M4）才能确定查询形态。引擎已按同一 `resolve()` 契约设计，M4 装配时注入即可。
 
@@ -747,11 +750,127 @@ release 已到 `v10.1.0` —— 写 `@v10` 会让 job 在 “Set up job” 就�
 
 ---
 
+## M5 补充（2026-09-15）：对比视图 · 行程自己的地址 · 「复制这套路线」
+
+> 这一轮把 M5 剩下的三个缺口一次补完（剩下的是分享页的 OG 图 / JSON-LD）：
+> 三套方案只有并列卡片（没法交叉对比）、行程只在首页表单下方渲染（刷新即空白）、
+> 后端的复制接口没有入口（一个有接口但没人能点的功能等于没有）。
+
+### 交付
+
+| # | 任务 | 状态 | 证据 |
+| --- | --- | --- | --- |
+| M5-6 | 对比表 `components/route-compare.tsx`（纯函数 `routeCompare` + 渲染） | ✅ | 9 个对比项 × N 套方案（名称/地点/总时长/步行/交通/预算/适合/需要留意/校验结果） |
+| M5-7 | 接入 `TripResultView`（卡片列表上方） | ✅ | 首页结果面板与分享页 `/t/{slug}` 同时生效 —— 两处共用一个渲染层，不会其中一个忘了 |
+| M5-8 | 格式化口径合并进 `lib/format.ts` | ✅ | `formatAmount` / `formatBudget` 从 `trip-result.tsx` 移入；新增 `formatTransit`，卡片与对比表**调用同一批函数**（同一个数字不会在两处长成两个样子） |
+| M5-9 | 行程自己的页面 `/trip/{id}` | ✅ | `app/trip/[id]/page.tsx`：刷新 / 收藏 / 复制地址都停在同一版；旧版地址仍可打开（版本链在后端） |
+| M5-10 | 分享页的「复制这套路线」 | ✅ | `components/copy-trip-button.tsx` → `copyPublicTrip()`（后端 `POST /public/trips/{slug}/copy`，早就可用但前端没有入口）；复制成功直接带去 `/trip/{id}` |
+| M5-11 | 两种挂载方式一份实现（`TripWorkspace` 的 `mode`） | ✅ | `inline`（首页内嵌）不碰地址栏、只给「在新页面打开 / 复制地址」；`page`（`/trip/{id}`）改路线/撤销后同步地址 |
+| M5-12 | 测试 | ✅ | 新增 33 条（对比表 14 · `formatTransit` 4 · 复制按钮 5 · 行程页 4 · 地址同步与复制 `trip-workspace` +6）前端 292 → **329** passed |
+
+### 四条纪律（写在组件头部，这里只记理由）
+
+1. **只对齐，不推荐**：不排名、不出现 `recommend_score` —— 分数来自 7 维权重 + 乘数，
+   一张表解释不了它，放出来只会退化成「按分数选」；
+2. **不知道就说不知道**：未知 / 未给出 / 未列出三种说法分开，并有一条测试**显式禁止**
+   `—`、`-`、`无` 与空白单元格 —— 占位符比「未知」更容易被当成正常值；
+3. **没校验过不许说通过**：`feasible === false` 但 `violations` 为空时仍报「未通过校验」；
+   `feasible` 不是 `true` 时报「校验结论未给出」（这两种形态最容易被顺手糊过去）；
+4. **少于 2 套方案就不画表**：一张只有一列的表会让人以为其余方案被排除了。
+
+列的配对不靠下标：每个单元格自带 `routeId`，渲染时按 id 做 key ——
+「第几列是哪套方案」由构造保证，而不是靠注释提醒「别搞错顺序」。
+
+### 顺手修掉的一个真问题：交通那一格会把有数据的一半也丢掉
+
+卡片原来的写法是 `transit_time_min === null ? "未知" : …` ——「有时长没距离」或
+「有距离没时长」时整格都变成「未知」，其实数据有一半。抽成 `formatTransit(minutes, meters)`，
+两端各自判断（`null, 1200` → 「时长未知 · 1.2 km」），卡片与对比表都改用它。
+
+### 行程自己的地址：三个选择与它们的代价
+
+1. **首页不自动跳转，保持内嵌 + 两个入口**。代价是首页刷新仍然回到空白表单，
+   换来的是：提交后立刻看到结果与「这次模型干了什么」（`meta.llm` 只在
+   `POST /trips:plan` 的响应里，`GET /trips/{id}` 的 meta 没有它 —— 一跳转就丢）。
+2. **`/trip/{id}` 用 `history.replaceState` 同步地址，不用 `router.replace`**。
+   后者会把这一页整个重新挂载（再拉一次行程，并把刚写下的「已生成第 N 版」清掉），
+   而我们要的只是「刷新时落在同一版」。Next 官方支持用原生 History API 改地址而不触发导航。
+3. **头部默认不再高亮「首页」**（`SiteHeader` 的 `current` 默认值从 `"home"` 改成 `null`）。
+   `aria-current="page"` 是给屏幕阅读器说的「你现在就在这里」，分享页与行程页都不是首页 ——
+   默认指向首页等于说了句假话；除分享页外，其余页面本来就都显式传了 `current`。
+
+### 本轮门槛
+
+| 项 | 结果 |
+| --- | --- |
+| 前端测试 | 292 → **329 passed**（28 个文件全绿） |
+| 前端覆盖率 | statements **98.94%** / branches **89.31%** / functions **96.15%**（闸门 96 / 84 / 89）；新文件 `route-compare.tsx` 100% / 89.13%、`copy-trip-button.tsx` 100% / 90.9%、`app/trip/[id]/page.tsx` 100% |
+| 静态检查 | `pnpm lint` / `typecheck` / `build` 全绿（多出 `/trip/[id]` 一条动态路由） |
+| 后端 | 未改动（本轮只动前端；复制接口本来就在） |
+
+### 刻意没做的事
+
+- **不显示评分、不做排名**（理由见纪律 1）；也没有「一键选最优」这类按钮 ——
+  替用户做决定的依据不在这一层；
+- **没做移动端专属布局**：对比表在窄屏是横向滚动（`min-w-[560px]` + `overflow-x-auto`），
+  4 列在 375px 下要滑一下才能看全；
+- **首页不自动跳 `/trip/{id}`**（理由见上）；
+- **没把 `meta.llm` 搬进 `GET /trips/{id}`**：那需要后端存下每次规划的模型用量并回传，
+  属另一个改动；这也是「首页内嵌」这条路必须保留的原因；
+- **没做分享页的 OG 图 / JSON-LD**：M5 最后一项。
+### M5 收尾（2026-09-15）：分享页 OG 图 + JSON-LD（AC-9.5）· 冒烟捞出一个后端真 bug
+
+> M5 的最后一项。与前几轮同一套做法：探针先行（`next/og` + `sharp` 在本机
+> 能否真出图、SVG 内联、CJK 字形），再实现，再真实冒烟 ——
+> 而冒烟照例捞出了单测抓不到的东西：一个后端会话污染 bug 和三个 satori 渲染规则。
+
+| # | 任务 | 状态 | 证据 |
+| --- | --- | --- | --- |
+| M5-13 | 动态 OG 图 `app/t/[slug]/opengraph-image.tsx`（Next 文件约定） | ✅ | 1200×630 PNG；行程卡（品牌行 + 标题 + 站序示意图 + 方案摘要）与失效空卡两种形态；`force-dynamic` 与页面同一选择（取消分享必须立刻失效） |
+| M5-14 | JSON-LD `schema.org/TouristTrip` | ✅ | `lib/og.ts` 纯函数：没拿到的字段不写（无 itinerary 时整键不出现、时间缺的站只写站名、>8 站只列前 8）；读不到行程时整个 `<script>` 不输出 |
+| M5-15 | `metadataBase`（`lib/site.ts` 唯一出处 + `SITE_URL`） | ✅ | 服务端专用 env（不占浏览器可见白名单）；缺省落 `localhost:3000`；生产不设则社交预览拿到的是 localhost 链接 —— 模板里写明了这个后果 |
+| M5-16 | 冒烟捞出的后端真 bug：**`put_llm` 撞唯一键污染整个会话** | ✅ 已修 | 两个并发规划算出同一个 prompt 时，后写方撞 `llm_cache.cache_key` 唯一约束；上层 `except` 吞得掉异常，**吞不掉已污染的 session**，本次规划随后必然 500 —— 与注释"缓存写失败不影响本次结果"直接矛盾。修法：先查再插（撞键保留原行刷新 `last_hit_at`），配集成回归测试 |
+| M5-17 | 三个 satori 渲染规则（都是冒烟报错教会我们的） | ✅ | ① SVG 内 `<text>` 不支持（"convert them to <path>"）→ 站点编号改 HTML 绝对定位叠加；② 多子节点的 `<div>` 必须显式 `display: flex`（含单文本子节点也要求显式）；③ 页面 metadata 里手写 `images` 数组会**顶掉** opengraph-image 文件约定的自动填充（og:image 从 head 里消失，冒烟抓到过这个回归）→ 不写 images，让文件约定自己说话 |
+
+**探针先行**（本机 macOS）：`ImageResponse` 不带自定义字体时 CJK 交由系统字体解析，
+真实出图验证过（两种字形渲染出不同 PNG，同输入幂等）；`sharp` 由 devDep 移入 dependencies
+（`next start` 生产链路真用它渲染 OG 图）。
+
+**真实冒烟（前后端 + 真实知识库 1622 地点）**：规划 → 分享 → 抓分享页 HTML：
+
+| 检查 | 结果 |
+| --- | --- |
+| `og:image` / `og:image:width` / `og:image:height` / `og:image:alt` | 全部出现，指向 `/t/{slug}/opengraph-image` |
+| `twitter:card` / `twitter:image` | `summary_large_image`（文件约定自动带出）+ 同一图片地址 |
+| JSON-LD | `@type: TouristTrip`，itinerary 三站带时间窗，`url` 指向分享页 |
+| OG 图本体 | 行程卡 44717 bytes / 空卡 38626 bytes，**两图像素差异 14.5%**（不是同一张图缓存串了） |
+| 失效 slug 页面 | `share-unavailable` + `<meta name="robots" content="noindex, nofollow"/>`，OG 图是空卡 |
+| 未知 slug 的 OG 图 | 200 PNG（真话空卡），绝不画编造的行程 |
+
+### 本轮门槛
+
+| 项 | 结果 |
+| --- | --- |
+| 后端测试 | 1021 → **1022** passed（+1：重复写 llm_cache 不污染会话的回归）；覆盖率 95.52%（闸门 93%）；mypy strict 119 文件 0 错 |
+| 前端测试 | 329 → **367** passed（+38：og 纯函数 26 · og-card 渲染 5 · og-image 路由 3 · 分享页 JSON-LD/社交 metadata 4） |
+| 前端覆盖率 | statements **99.03%** / branches 89.99% / functions 96.42%；新文件 `og.ts` / `site.ts` 100%，`og-card.tsx` 100%/96.3%，`opengraph-image.tsx` 100% |
+| 静态检查 | ruff 0；mypy 0；`pnpm lint` / `typecheck` / `build` 全绿（多出 `/t/[slug]/opengraph-image` 一条动态路由） |
+
+### 刻意没做的事
+
+- **OG 卡不放 `recommend_score`**：一张图解释不了 7 维权重 + 乘数（同对比表纪律 1）；
+- **没做自定义字体加载**：缺字体环境的 CJK 会退到系统字体；兜底措辞是数字与 ASCII，仍可读；
+  要完全可控得在 `ImageResponse` 里挂 Noto Sans SC 子集，留待有真实部署需求时再做；
+- **JSON-LD 只写拿得到的字段**：`offers`（预算）没写 —— `budget_estimated` 的估算值
+  进结构化数据等于冒充官方票价，宁可缺。
+
+---
+
 ## 下一步（M5 起）
 
 | 里程碑 | 内容 | 前置条件 |
 | --- | --- | --- |
-| M5 | 前端结果页：生成页（SSE 进度）/ 方案 Tab / 地图 / 时间线 / 对比 / Diff / 分享页（SSR+OG+JSON-LD） | M4 ✅ |
+| M5 | ~~前端结果页：生成页（SSE 进度）/ 方案 Tab / 地图 / 时间线 / 对比 / Diff / 分享页（SSR+OG+JSON-LD）~~ | **✅ 全部完成（2026-09-15）** |
 | M6 | 补齐 B1/B2 数据缺口、关系图扩量、知识库扩至全类别达标 | Overpass 恢复 |
-| M7 | E2E（Playwright 16 场景）、异常注入 25 项、性能与安全检查（含 p95） | M5 |
+| M7 | E2E（Playwright 16 场景）、异常注入 25 项、性能与安全检查（含 p95） | M5 ✅ |
 | M8 | 交付报告（PRD 第四十节 12 小节） | 全部 |

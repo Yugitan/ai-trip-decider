@@ -18,6 +18,7 @@ import {
   NetworkError,
   REQUEST_CREDENTIALS,
   REVISION_INSTRUCTION_LIMIT,
+  copyPublicTrip,
   getCityStats,
   getHealth,
   getSharedTrip,
@@ -626,6 +627,36 @@ describe("getSharedTrip", () => {
     );
 
     const error = (await getSharedTrip("gone").catch((e: unknown) => e)) as ApiError;
+
+    expect(error.code).toBe("SHARE_NOT_FOUND");
+    expect(error.status).toBe(404);
+  });
+});
+
+describe("copyPublicTrip", () => {
+  it("POST 到 /public/trips/{slug}/copy，slug 会被编码", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(okEnvelope({ trip_id: "trip-copy-1", routes: [] }), { status: 201 }),
+    );
+
+    const result = await copyPublicTrip("a b/c");
+
+    expect(lastUrl()).toBe(`${API_BASE_URL}/api/v1/public/trips/a%20b%2Fc/copy`);
+    // 必须带方法：默认是 GET，拿不到副本
+    expect(lastInit().method).toBe("POST");
+    // 副本要能直接带去 /trip/{id}，所以 trip_id 必须透出来
+    expect(result.data.trip_id).toBe("trip-copy-1");
+  });
+
+  it("分享被取消（404）时抛出可展示的 ApiError，而不是返回一个空副本", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        errorEnvelope({ code: "SHARE_NOT_FOUND", message: "分享链接不存在或已失效" }),
+        { status: 404 },
+      ),
+    );
+
+    const error = (await copyPublicTrip("gone").catch((e: unknown) => e)) as ApiError;
 
     expect(error.code).toBe("SHARE_NOT_FOUND");
     expect(error.status).toBe(404);

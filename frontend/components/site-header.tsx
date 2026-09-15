@@ -11,6 +11,10 @@ import Link from "next/link";
  * 这个组件是服务端组件，且页面测试会直接渲染它 —— 一旦引入 App Router 的
  * 客户端 hook，没有 Router 上下文的环境（单测、`next build` 的静态预渲染路径）就会报错。
  *
+ * 默认**不高亮任何一项**（而不是默认首页）：`aria-current="page"` 是给屏幕阅读器
+ * 用的"你现在就在这里"，分享页 `/t/{slug}` 与行程页 `/trip/{id}` 都不是首页，
+ * 默认指向首页就等于说了句假话。
+ *
  * 响应式：容器允许换行（`flex-wrap`），360px 下导航整体落到第二行，
  * 不会出现横向滚动；主导航 CTA 在手机上隐藏（Hero 里有同样可达的入口）。
  */
@@ -32,7 +36,7 @@ const NAV_ITEMS: ReadonlyArray<{ key: NavKey; href: string; label: string }> = [
  */
 const SHOW_DEV_ENTRY = process.env.NODE_ENV !== "production";
 
-export function SiteHeader({ current = "home" }: { current?: NavKey }) {
+export function SiteHeader({ current = null }: { current?: NavKey | null }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line/70 bg-sand/75 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5 sm:px-8 sm:py-5">

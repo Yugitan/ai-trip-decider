@@ -122,6 +122,9 @@ beforeEach(() => {
   reviseMock.mockReset();
   undoMock.mockReset();
   shareMock.mockReset();
+  // jsdom 的地址是**跨用例保留**的（`history.replaceState` 改的就是它）：
+  // 每个用例从 `/` 出发，否则"地址栏有没有变"这类断言会互相污染。
+  window.history.replaceState(null, "", "/");
 
   // 按 id 返回：只有切到了 trip-2 才可能看到新路线名
   getTripMock.mockImplementation((id: string) =>
@@ -136,6 +139,12 @@ beforeEach(() => {
 /** 等行程渲染出来（后面才有输入框与按钮可点）。 */
 async function renderWorkspace() {
   render(<TripWorkspace tripId="trip-1" />);
+  await screen.findByTestId("trip-result");
+}
+
+/** 以"行程自己的页面"模式渲染（`/trip/{id}` 走的就是这条）。 */
+async function renderWorkspacePage(tripId = "trip-1") {
+  render(<TripWorkspace tripId={tripId} mode="page" />);
   await screen.findByTestId("trip-result");
 }
 
@@ -428,5 +437,132 @@ describe("分享", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "生成公开链接" })).toBeEnabled(),
     );
+  });
+});
+
+// ── 这一版自己的地址（/trip/{id}）──────────────────────────────────────────
+//
+// 两种挂载方式在这一块上刚好相反，而它们看着长得差不多 —— 正是最容易搞错的地方：
+// - `inline`（首页表单下方）：**不碰地址栏**，只给一个入口；
+// - `page`（`/trip/{id}`）：改路线/撤销之后地址栏必须跟着换成新版，否则刷新就回旧版。
+
+describe("这一版自己的地址", () => {
+  it("内嵌结果里给出直达链接，并用当前版本拼地址", async () => {
+    await renderWorkspace();
+
+    const link = screen.getByRole("link", { name: "在新页面打开" });
+    expect(link).toHaveAttribute("href", "/trip/trip-1");
+    // 边界要说清楚：这个地址只有自己这个浏览器能打开
+    expect(screen.getByText(/只在\s*这个浏览器里能打开/)).toBeInTheDocument();
+    expect(screen.getByText(/想发给别人，用下面的公开链接/)).toBeInTheDocument();
+  });
+
+  it("★ 内嵌模式不碰地址栏（用户还在填表单的页面上）", async () => {
+    reviseMock.mockResolvedValue({
+      data: {
+        trip_id: "trip-2",
+        revision_no: 2,
+        diff: { sentence: "去掉广州塔" },
+        needs_clarification: null,
+      },
+      meta: META,
+    });
+
+    await renderWorkspace();
+    const user = await typeInstruction("去掉广州塔");
+    await user.click(screen.getByRole("button", { name: "改路线" }));
+
+    await screen.findByTestId("revision-note");
+    expect(getTripMock).toHaveBeenLastCalledWith("trip-2");
+    // 地址没动，但给出的链接已经是新版本
+    expect(window.location.pathname).toBe("/");
+    expect(screen.getByRole("link", { name: "在新页面打开" })).toHaveAttribute(
+      "href",
+      "/trip/trip-2",
+    );
+  });
+
+  it("★ page 模式：改路线后地址栏换成新版（刷新不会回到旧版）", async () => {
+    reviseMock.mockResolvedValue({
+      data: {
+        trip_id: "trip-2",
+        revision_no: 2,
+        diff: { sentence: "天数 1 天 → 2 天" },
+        needs_clarification: null,
+      },
+      meta: META,
+    });
+
+    await renderWorkspacePage();
+    // 在这一页上不再给"指向自己"的入口
+    expect(screen.queryByRole("link", { name: "在新页面打开" })).toBeNull();
+
+    const user = await typeInstruction("改成 2 天");
+    await user.click(screen.getByRole("button", { name: "改路线" }));
+
+    await screen.findByTestId("revision-note");
+    expect(window.location.pathname).toBe("/trip/trip-2");
+  });
+
+  it("★ page 模式：撤销之后地址也回到那一版", async () => {
+    undoMock.mockResolvedValue({ data: makeTrip({ trip_id: "trip-0" }), meta: META });
+
+    await renderWorkspacePage();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "撤销这次修改" }));
+
+    await screen.findByTestId("undo-note");
+    expect(window.location.pathname).toBe("/trip/trip-0");
+  });
+
+  it("★ 复制的是**当前**版本的地址（改完路线不能把上一版的地址发出去）", async () => {
+    reviseMock.mockResolvedValue({
+      data: {
+        trip_id: "trip-2",
+        revision_no: 2,
+        diff: { sentence: "改成 2 天" },
+        needs_clarification: null,
+      },
+      meta: META,
+    });
+
+    await renderWorkspace();
+    const user = await typeInstruction("改成 2 天");
+    await user.click(screen.getByRole("button", { name: "改路线" }));
+    await screen.findByTestId("revision-note");
+
+    // 顺序要紧：user-event 自己会往 navigator 上装剪贴板，替身必须在 setup 之后装
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    stubClipboard(writeText);
+    await user.click(screen.getByRole("button", { name: "复制地址" }));
+
+    expect(writeText).toHaveBeenCalledWith("http://localhost:3000/trip/trip-2");
+  });
+
+  it("剪贴板不可用时把地址直接写出来（不假装复制成功）", async () => {
+    const user = userEvent.setup();
+    stubClipboard(vi.fn().mockRejectedValue(new Error("denied")));
+
+    await renderWorkspace();
+    await user.click(screen.getByRole("button", { name: "复制地址" }));
+
+    const note = await screen.findByTestId("permalink-note");
+    expect(note).toHaveTextContent("请手动复制");
+    // 地址本身仍然要露出来，否则用户无从复制
+    expect(note).toHaveTextContent("http://localhost:3000/trip/trip-1");
+    expect(screen.getByRole("button", { name: "复制地址" })).toBeInTheDocument();
+  });
+
+  it("复制成功显示「已复制地址」", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+
+    await renderWorkspace();
+    // 先 setup 再装替身：反过来的话会被 user-event 自带的剪贴板盖掉（见文件头注释）
+    const user = userEvent.setup();
+    stubClipboard(writeText);
+    await user.click(screen.getByRole("button", { name: "复制地址" }));
+
+    expect(writeText).toHaveBeenCalledWith("http://localhost:3000/trip/trip-1");
+    expect(await screen.findByRole("button", { name: "已复制地址" })).toBeInTheDocument();
   });
 });

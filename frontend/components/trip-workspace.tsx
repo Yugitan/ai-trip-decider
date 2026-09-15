@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import {
@@ -12,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   describeFailure,
+  FailureBlock,
   TripResultView,
   useTrip,
   type FailureInfo,
@@ -25,6 +27,12 @@ import {
  * `parent_trip_id` 指向上一版）：所以改完/撤销之后，面板必须切到新的 trip_id 并重新取回，
  * 而不是把旧对象在本地拼一拼。这样"界面上看到的"与"接口里存的"永远是同一份东西 ——
  * 刷新、分享、再次修改都不会错位。
+ *
+ * ★ 两种挂载方式，一份实现（`mode`）★
+ * - `inline`（默认）：首页表单下方的内嵌结果。它**不碰地址栏** —— 用户还在填表单的页面上，
+ *   替他把地址改掉是自作主张；改成给一个「这一版有自己的固定地址」+「在新页面打开」的入口；
+ * - `page`：行程自己的页面 `/trip/{id}`。改路线/撤销换的是另一条 trip，
+ *   所以地址栏必须跟着换成新版 —— 否则刷新会回到改之前那一版，地址说 A、屏幕上是 B。
  *
  * ★ 另一个刻意的选择：操作结果不美化 ★
  * - 改不动时后端会返回 `needs_clarification`（它没听懂），界面把它当成**反问**显示，不当错误；
@@ -44,7 +52,16 @@ interface ShareState {
   slug: string;
 }
 
-export function TripWorkspace({ tripId }: { tripId: string }) {
+export type TripWorkspaceMode = "inline" | "page";
+
+export function TripWorkspace({
+  tripId,
+  mode = "inline",
+}: {
+  tripId: string;
+  /** `page` = 行程自己的页面（`/trip/{id}`）；`inline` = 首页表单下方的内嵌结果 */
+  mode?: TripWorkspaceMode;
+}) {
   const [currentId, setCurrentId] = useState(tripId);
   const { trip, loading, error, reload } = useTrip(currentId);
 
@@ -62,6 +79,11 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
   const [shareNotice, setShareNotice] = useState<string | null>(null);
   const [shareFailure, setShareFailure] = useState<FailureInfo | null>(null);
   const [copied, setCopied] = useState(false);
+  /** 「这一版自己的地址」那一块的复制状态（与公开链接分开：两个按钮各报各的结果）。 */
+  const [permalink, setPermalink] = useState<{ copied: boolean; note: string | null }>({
+    copied: false,
+    note: null,
+  });
 
   const resetFeedback = useCallback(() => {
     setRevision({ kind: "idle" });
@@ -71,6 +93,7 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
     setShareNotice(null);
     setShareFailure(null);
     setCopied(false);
+    setPermalink({ copied: false, note: null });
   }, []);
 
   // 父组件换了一条行程（用户又提交了一次规划）→ 跟着换，并清掉上一条的提示
@@ -96,6 +119,15 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
     setShareNotice(null);
     setShareFailure(null);
     setCopied(false);
+    setPermalink({ copied: false, note: null });
+
+    // ★ 地址栏只在行程自己的页面上同步 ★
+    // 用 `history.replaceState` 而不是 `router.replace`：后者会把这一页整个重新挂载
+    // （再拉一次行程，并把刚写下的「已生成第 N 版」清掉），而我们要的只是
+    // 「刷新时落在同一版」这一件事。Next 官方支持用原生 History API 改地址而不触发导航。
+    if (mode === "page") {
+      window.history.replaceState(null, "", `/trip/${nextTripId}`);
+    }
   }
 
   async function handleRevise(event: FormEvent<HTMLFormElement>) {
@@ -163,6 +195,27 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
       setShareFailure(describeFailure(cause, next ? "没能生成分享链接" : "没能取消分享"));
     } finally {
       setSharing(false);
+    }
+  }
+
+  /**
+   * 复制这一版自己的地址。
+   *
+   * 地址用当前版本（`currentId`）拼 —— 改完路线后那个 id 已经是一条新的 trip，
+   * 复制旧地址就等于把用户送回上一版。
+   */
+  async function copyPermalink() {
+    const address = new URL(`/trip/${currentId}`, window.location.origin).toString();
+    try {
+      await navigator.clipboard.writeText(address);
+      setPermalink({ copied: true, note: null });
+    } catch {
+      // 剪贴板不可用（http、浏览器策略、用户拒绝）时不假装成功，
+      // 但也不能一句「复制失败」了事：地址本身是有效的，直接写出来让用户手动复制。
+      setPermalink({
+        copied: false,
+        note: `这个环境不允许脚本写剪贴板，地址是 ${address}，请手动复制。`,
+      });
     }
   }
 
@@ -296,6 +349,41 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
         </div>
       </form>
 
+      {/* ── 这一版自己的地址（只在内嵌结果里显示）────────────────────────────
+          在 `/trip/{id}` 上不显示：那一页自己就是那个地址，再给一个指向自己的链接
+          只会让人以为点了会去别处。 */}
+      {mode === "inline" ? (
+        <div className="rounded-[10px] border border-line bg-shell/60 p-4 sm:p-5">
+          <h3 className="text-sm font-medium text-ink">这一版有自己的固定地址</h3>
+          <p className="mt-1 text-xs leading-relaxed text-ink-soft">
+            <code className="rounded bg-sand px-1.5 py-0.5 text-ink">/trip/{currentId}</code>{" "}
+            就指向现在这一版：刷新、收藏、关掉再打开都停在它上面。反过来，这个地址只在
+            这个浏览器里能打开（行程按会话隔离，不需要登录）—— 想发给别人，用下面的公开链接。
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Link
+              href={`/trip/${currentId}`}
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-5 text-sm text-sand transition-transform duration-300 hover:scale-[1.03] motion-reduce:hover:scale-100"
+            >
+              在新页面打开
+            </Link>
+            <Button variant="secondary" size="md" onClick={() => void copyPermalink()}>
+              {permalink.copied ? "已复制地址" : "复制地址"}
+            </Button>
+          </div>
+          <div aria-live="polite">
+            {permalink.note === null ? null : (
+              <p
+                data-testid="permalink-note"
+                className="mt-2 text-xs leading-relaxed text-ink-soft"
+              >
+                {permalink.note}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       {/* ── 分享 ───────────────────────────────────────────────────────── */}
       <div className="rounded-[10px] border border-line bg-shell/60 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -360,18 +448,3 @@ export function TripWorkspace({ tripId }: { tripId: string }) {
   );
 }
 
-/** 失败块：标题 / 说明 / 细节 / 提示，四行都给出来，不吞信息。 */
-function FailureBlock({ failure }: { failure: FailureInfo }) {
-  return (
-    <>
-      <p className="text-sm font-semibold text-ink">{failure.title}</p>
-      <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{failure.message}</p>
-      {failure.detail === null ? null : (
-        <p className="tnum mt-1 text-xs text-ink-soft">{failure.detail}</p>
-      )}
-      {failure.hint === null ? null : (
-        <p className="mt-1 text-xs leading-relaxed text-ink-soft">{failure.hint}</p>
-      )}
-    </>
-  );
-}

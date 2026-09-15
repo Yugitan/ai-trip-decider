@@ -503,6 +503,21 @@ export function getSharedTrip(slug: string): Promise<ApiResult<TripOut>> {
   return request<TripOut>(`/api/v1/public/trips/${encodeURIComponent(slug)}`);
 }
 
+/**
+ * 「复制这套路线」：把别人分享的行程复制成**属于当前访客**的一份可编辑副本（PRD AC-9.4）。
+ *
+ * 后端返回的是复制出来的那一份完整行程（HTTP 201），调用方拿 `trip_id` 跳到
+ * `/trip/{id}` 去改。两点注意：
+ * - 它读的是**别人已公开**的 slug，但写出来的副本归当前会话 —— 与 `getSharedTrip`
+ *   一样不要求登录，不同的是复制之后就能改了；
+ * - 原行程不受任何影响（复制，不是接管）。
+ */
+export function copyPublicTrip(slug: string): Promise<ApiResult<TripOut>> {
+  return request<TripOut>(`/api/v1/public/trips/${encodeURIComponent(slug)}/copy`, {
+    method: "POST",
+  });
+}
+
 // ── 只读目录（知识库浏览）────────────────────────────────────────────────────
 //
 // 这组端点把知识库变成"软件里能看见的东西"。

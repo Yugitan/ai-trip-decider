@@ -1,8 +1,17 @@
 import type { Metadata, Viewport } from "next";
 
+import { siteUrl } from "@/lib/site";
+
 import "./globals.css";
 
 export const metadata: Metadata = {
+  /**
+   * metadataBase：把相对的 og:image / og:url 解析成绝对地址。
+   * 不设的话 Next 会按部署平台猜（Vercel 上猜对，自托管猜错），
+   * 且开发期会打一条 "metadataBase not set" 的警告。
+   * 值只有一个出处：`lib/site.ts` 的 `SITE_URL`。
+   */
+  metadataBase: new URL(siteUrl()),
   title: {
     default: "TripDecider · 你负责决定怎么玩，路线交给我",
     template: "%s — TripDecider",

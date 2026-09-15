@@ -15,7 +15,9 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { TripOut, TripRoute } from "@/lib/api";
-import { formatAmount, formatBudget, formatStopWarning, TripResultView } from "@/components/trip-result";
+import { formatStopWarning, TripResultView } from "@/components/trip-result";
+// 金额与预算的格式化函数已移到 `lib/format`（结果卡片与对比视图共用同一份口径）
+import { formatAmount, formatBudget } from "@/lib/format";
 
 // 这个文件只测**纯展示**（`TripResultView` 与几个格式化函数）：不联网、不需要 mock。
 // 「取回行程 + 改路线/撤销/分享」在 `trip-workspace.test.tsx` 里测。
@@ -190,6 +192,11 @@ describe("TripResultView", () => {
     expect(screen.getByTestId("trip-result")).toBeInTheDocument();
     expect(screen.getByText("广州 · 09:00–21:00")).toBeInTheDocument();
     expect(screen.getByText(/1 天 · 2 套方案/)).toBeInTheDocument();
+    // 多套方案时，卡片列表上方会先出现对比表 —— 这条断言的是"接进来了"，
+    // 而不是"组件能渲染"（后者在 `route-compare.test.tsx` 里），
+    // 否则把 `<RouteCompare />` 从结果视图里拿掉也没人发现。
+    expect(within(screen.getByTestId("trip-result")).getByTestId("route-compare"))
+      .toBeInTheDocument();
 
     const card = screen.getByTestId("trip-route-A");
     expect(within(card).getByText("老城寻味慢行")).toBeInTheDocument();
@@ -225,6 +232,8 @@ describe("TripResultView", () => {
     render(<TripResultView trip={{ ...TRIP, routes: [BARE_ROUTE] }} />);
 
     const card = screen.getByTestId("trip-route-B");
+    // 只有一套方案时不画对比表：一列的表不叫对比，还会让人以为其余方案被排除了
+    expect(screen.queryByTestId("route-compare")).toBeNull();
     // 未知枚举原样显示，方便发现后端加了新取值
     expect(within(card).getByText("weird_archetype")).toBeInTheDocument();
     expect(within(card).getByText(/这套方案没有带站点明细/)).toBeInTheDocument();

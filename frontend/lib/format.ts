@@ -73,6 +73,22 @@ export function formatDistance(meters: number | null): string {
   return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${meters} m`;
 }
 
+/**
+ * 站间交通 → 人话：时长与距离**各自判断**，缺哪一半就说哪一半未知。
+ *
+ * 为什么不能写成 `minutes === null ? "未知" : …`：那样会在「有时长没距离」时把
+ * 时长一起丢掉，或反过来。只缺一半就只说一半，比整格变成「未知」有用得多，
+ * 而且不会让人以为"这一段没有任何数据"。
+ */
+export function formatTransit(minutes: number | null, meters: number | null): string {
+  const time = minutes === null ? null : `${minutes} 分钟`;
+  const distance = meters === null ? null : formatDistance(meters);
+  if (time === null && distance === null) return "未知";
+  if (time === null) return `时长未知 · ${distance}`;
+  if (distance === null) return time;
+  return `${time} · ${distance}`;
+}
+
 /** 出行方式枚举 → 中文；未知枚举原样返回，便于发现后端新增了取值。 */
 export function formatTransport(value: string): string {
   return lookupLabel(TRANSPORT_LABELS, value) ?? value;
@@ -105,6 +121,51 @@ export function formatPrice(min: number | null, max: number | null): string {
 
 function isUsableAmount(value: number | null): value is number {
   return value !== null && Number.isFinite(value) && value >= 0;
+}
+
+/**
+ * 金额字符串 → 展示值。
+ *
+ * 后端用 Decimal，JSON 里是**字符串**（`"18.32"`）。这里只做尾零收敛（`"20.00"` → `"20"`），
+ * 不做任何浮点换算：一旦 `Number()` 之后再 `toFixed()`，就等于在前端重算了一遍钱。
+ * 非数值内容原样返回，不猜。
+ */
+export function formatAmount(value: string): string {
+  if (!/^\d+(\.\d+)?$/.test(value)) return value;
+  return value.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
+/** 预算口径 → 后缀。未知口径返回空串，不硬编一个"每人"上去。 */
+function budgetScopeSuffix(scope: string | null): string {
+  if (scope === "per_person") return "/人";
+  if (scope === "total") return "/总计";
+  return "";
+}
+
+/**
+ * 预算区间 → 人话。与 `formatPrice` 同一原则：
+ * 只有下限就说「起」，只有上限就说「最多」，两端反了就说「未知」。
+ *
+ * 参数是 `TripRoute` 上的三个字段（`budget_min` / `budget_max` / `budget_scope`），
+ * 放在这里而不是某个组件里：**结果卡片与对比视图必须说同一句话** ——
+ * 同一份数据在两处显示成两个样子，比只说一处更糟。
+ */
+export function formatBudget(
+  min: string | null,
+  max: string | null,
+  scope: string | null,
+): string {
+  const suffix = budgetScopeSuffix(scope);
+  const low = min === null ? null : formatAmount(min);
+  const high = max === null ? null : formatAmount(max);
+  const lowIsAmount = low !== null && /^\d/.test(low);
+  const highIsAmount = high !== null && /^\d/.test(high);
+
+  if (!lowIsAmount && !highIsAmount) return "未知";
+  if (!lowIsAmount) return `最多 ¥${high}${suffix}`;
+  if (!highIsAmount) return `¥${low} 起${suffix}`;
+  if (Number(low) > Number(high)) return "未知";
+  return low === high ? `¥${low}${suffix}` : `¥${low}–${high}${suffix}`;
 }
 
 /** 允许出现在 `<a href>` 里的协议白名单。 */

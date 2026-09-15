@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ApiError, getSharedTrip, type TripOut } from "@/lib/api";
+import { tripJsonLd } from "@/lib/og";
+import { siteUrl } from "@/lib/site";
+import { CopyTripButton } from "@/components/copy-trip-button";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { TripResultView } from "@/components/trip-result";
@@ -14,13 +17,17 @@ import { TripResultView } from "@/components/trip-result";
  * 在它存在之前，那个链接是一个**死链** —— 界面上"生成分享链接"能成功，
  * 但点开是 404。分享功能的价值全在"别人能打开"，所以这一页不是锦上添花。
  *
- * 三个刻意的选择：
+ * 四个刻意的选择：
  * 1. **服务端渲染**：拿的是 `getSharedTrip`（无鉴权、只返回已公开的行程），
  *    所以任何浏览器打开都能看到内容，不依赖 cookie —— 这正是它与 `/trips/{id}` 的区别。
  * 2. **`force-dynamic`**：取消分享必须**立刻**失效（AC-9.7）。
  *    一旦静态化/缓存，取消之后链接还会继续可用一段时间 —— 那就等于骗人。
- * 3. **只读**：没有修改/撤销/分享按钮。复制成自己的一份（AC-9.4）还没接，
- *    这一页不提供任何看起来能改的入口。
+ * 3. **只读**：没有修改/撤销/分享按钮 —— 但提供「复制这套路线」（`CopyTripButton`，AC-9.4）：
+ *    它把这份行程复制成**访客自己**的一份可编辑副本，然后带去 `/trip/{id}`。
+ *    复制出来的东西归访客，这一页上的原行程仍然动不了。
+ * 4. **社交预览**（AC-9.5）：`og:image` 来自同路由的 `opengraph-image.tsx`
+ *    （文件约定自动接线，手写必然漂移）；结构化数据用 `schema.org/TouristTrip`
+ *    JSON-LD，由 `tripJsonLd()` 生成 —— 没拿到的字段就不写，绝不占位。
  */
 
 export const dynamic = "force-dynamic";
@@ -32,20 +39,28 @@ interface PageProps {
 const SHELL = "mx-auto w-full max-w-4xl px-5 sm:px-8";
 
 /**
- * 标题里带上行程名，分享出去才像样（PRD §21 提到了 OG 图，尚未实现）。
- * 代价是多一次请求：`request()` 用 `cache: "no-store"`，Next 不会替我们合并这两次。
- * 换来的是一条有意义的标题 —— 分享链接的预览文本就是这个。
+ * 标题里带上行程名，分享出去才像样。
+ * 代价是多一次请求：`request()` 用 `cache: "no-store"`，Next 不会替我们合并这两次
+ * （`opengraph-image.tsx` 里还有第三次）。换来的是预览标题与卡片都用真数据。
  */
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   try {
     const { data } = await getSharedTrip(slug);
+    const title = data.title ? `${data.title} · 分享的路线` : "分享的路线";
+    const description = `${data.days} 天 · ${data.route_count} 套方案（广州）`;
     return {
-      title: data.title ? `${data.title} · 分享的路线` : "分享的路线",
-      description: `${data.days} 天 · ${data.route_count} 套方案（广州）`,
+      title,
+      description,
+      // og:image 不在这里声明：同路由的 opengraph-image.tsx（文件约定）
+      // 会自动补全 og:image / og:image:width / og:image:alt 及 twitter 对应项 ——
+      // 手写一个 images 数组反而会**顶掉**文件约定的自动填充（实测过：
+      // images 里写 url:"" 之后 og:image 从 head 里消失，冒烟抓到过这个回归）。
+      openGraph: { title, description, type: "article" },
+      twitter: { title, description },
     };
   } catch {
-    return { title: "这个分享链接不可用" };
+    return { title: "这个分享链接不可用", robots: { index: false, follow: false } };
   }
 }
 
@@ -75,6 +90,8 @@ export default async function SharedTripPage({ params }: PageProps) {
     }
   }
 
+  const pageUrl = `${siteUrl()}/t/${encodeURIComponent(slug)}`;
+
   return (
     <>
       <SiteHeader />
@@ -87,6 +104,16 @@ export default async function SharedTripPage({ params }: PageProps) {
           下面是原样的行程快照：站点顺序、停留时间、站间交通与预算，以及它带着的不确定性。
           分享者取消分享后，这个链接会立刻失效。
         </p>
+
+        {/* 结构化数据（AC-9.5）：给社交平台与搜索引擎的机器摘要。
+            读不到行程时**不输出** —— 空的 JSON-LD 比没有更糟。 */}
+        {trip === null ? null : (
+          <script
+            type="application/ld+json"
+            // 数据由 tripJsonLd 从接口字段构造，name/url 均为文本或我们自己拼的 URL。
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(tripJsonLd(trip, pageUrl)) }}
+          />
+        )}
 
         <div className="mt-8">
           {trip === null ? (
@@ -108,7 +135,10 @@ export default async function SharedTripPage({ params }: PageProps) {
           )}
         </div>
 
-        <div className="mt-10 rounded-card border border-line bg-shell/60 p-6">
+        {/* 复制只在读到行程时才有意义：读不到就没有可复制的东西，也不该给一个只会失败的按钮。 */}
+        {trip === null ? null : <div className="mt-10"><CopyTripButton slug={slug} /></div>}
+
+        <div className="mt-6 rounded-card border border-line bg-shell/60 p-6">
           <h2 className="text-lg text-ink">也想让别人给你排一条？</h2>
           <p className="mt-2 text-sm leading-relaxed text-ink-soft">
             填一份需求（有默认值，不填也能提交），拿到 A/B/C 三套取舍不同的广州路线。

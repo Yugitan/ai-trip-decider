@@ -17,6 +17,7 @@ import {
   formatDistance,
   formatDuration,
   formatPrice,
+  formatTransit,
   formatTransport,
   lookupLabel,
   safeExternalUrl,
@@ -83,6 +84,27 @@ describe("formatDistance", () => {
   it("公里保留一位小数", () => {
     expect(formatDistance(1500)).toBe("1.5 km");
     expect(formatDistance(12345)).toBe("12.3 km");
+  });
+});
+
+describe("formatTransit", () => {
+  it("两端都有时，时长与距离一起给", () => {
+    expect(formatTransit(17, 2969)).toBe("17 分钟 · 3.0 km");
+    expect(formatTransit(8, 537)).toBe("8 分钟 · 537 m");
+  });
+
+  it("★ 只缺一半时，不要连另一半一起丢掉", () => {
+    // 旧写法是「时长为 null ⇒ 整格显示未知」，于是有距离也看不到
+    expect(formatTransit(null, 1200)).toBe("时长未知 · 1.2 km");
+    expect(formatTransit(12, null)).toBe("12 分钟");
+  });
+
+  it("两端都没有才是「未知」", () => {
+    expect(formatTransit(null, null)).toBe("未知");
+  });
+
+  it("0 分钟是真实值（同地铁站旁的两点），不当成「没有数据」", () => {
+    expect(formatTransit(0, 30)).toBe("0 分钟 · 30 m");
   });
 });
 
