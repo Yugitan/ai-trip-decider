@@ -15,6 +15,7 @@ import {
   ADMIN_TOKEN_STORAGE_KEY,
   changedEnvValues,
   fetchDevConfig,
+  frontendEnvStatus,
   groupEnvFields,
   readAdminToken,
   saveAdminToken,
@@ -141,6 +142,67 @@ describe("changedEnvValues", () => {
     expect(changedEnvValues(fields, { LLM_PROVIDER: "" })).toEqual({
       LLM_PROVIDER: "",
     });
+  });
+});
+
+describe("frontendEnvStatus", () => {
+  const ok = {
+    frontend_env: {
+      keys: [
+        {
+          key: "NEXT_PUBLIC_AMAP_JS_KEY",
+          note: "结果页的站点示意图",
+          is_set: true,
+          source: "frontend/.env.local",
+        },
+        {
+          key: "AMAP_SECURITY_CODE",
+          note: "高德安全密钥",
+          is_set: false,
+          source: "",
+        },
+      ],
+      files: ["frontend/.env.local", "frontend/.env"],
+      editable_here: false,
+      explanation: "本面板改的是仓库根的 .env",
+    },
+  };
+
+  it("取出前端变量的存在性状态（已配置的带来源文件）", () => {
+    const status = frontendEnvStatus(ok);
+
+    expect(status?.keys.map((item) => item.key)).toEqual([
+      "NEXT_PUBLIC_AMAP_JS_KEY",
+      "AMAP_SECURITY_CODE",
+    ]);
+    expect(status?.keys[0]?.source).toBe("frontend/.env.local");
+    expect(status?.editable_here).toBe(false);
+  });
+
+  it("★ 后端回什么都好，界面都拿不到值 —— 状态里没有 value 这个字段", () => {
+    // 即便后端"多回"了一个 value，也不该被透传到界面上。
+    // 这里用一眼就是假的值：真实 Key 从不写进仓库（这条断言本身就是守它的）。
+    const leaky = {
+      frontend_env: {
+        ...ok.frontend_env,
+        keys: [{ ...ok.frontend_env.keys[0], value: "not-a-real-key-0123456789" }],
+      },
+    };
+
+    const status = frontendEnvStatus(leaky);
+
+    expect(JSON.stringify(status)).not.toContain("not-a-real-key");
+  });
+
+  it("形状不对时返回 null（界面据此整块不渲染，而不是画一张空表）", () => {
+    expect(frontendEnvStatus({})).toBeNull();
+    expect(frontendEnvStatus({ frontend_env: null })).toBeNull();
+    expect(frontendEnvStatus({ frontend_env: { keys: [] } })).toBeNull();
+    expect(frontendEnvStatus({ frontend_env: { keys: "NEXT_PUBLIC_AMAP_JS_KEY" } })).toBeNull();
+    // 缺字段的条目被过滤掉，而不是渲染出 undefined
+    expect(
+      frontendEnvStatus({ frontend_env: { keys: [{ key: "A" }, ok.frontend_env.keys[0]] } })?.keys,
+    ).toHaveLength(1);
   });
 });
 

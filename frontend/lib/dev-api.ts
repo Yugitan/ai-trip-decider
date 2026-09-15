@@ -34,6 +34,25 @@ export interface DevConfig {
   notice: string;
 }
 
+/** 一个**本面板改不了**的前端变量（写在 `frontend/.env.local`，Next 只读那里）。
+ *
+ * 后端只回报「配没配」与「从哪个文件读到的」，**永远没有值** ——
+ * 与 Secret 的只写不读是同一条纪律。
+ */
+export interface DevFrontendEnvKey {
+  key: string;
+  note: string;
+  is_set: boolean;
+  source: string;
+}
+
+export interface DevFrontendEnv {
+  keys: DevFrontendEnvKey[];
+  files: string[];
+  editable_here: boolean;
+  explanation: string;
+}
+
 export interface DevConfigGroup {
   group: string;
   fields: DevEnvField[];
@@ -101,6 +120,50 @@ export function changedEnvValues(
     if (next !== field.value) updates[field.key] = next;
   }
   return updates;
+}
+
+function isFrontendEnvKey(value: unknown): value is DevFrontendEnvKey {
+  if (typeof value !== "object" || value === null) return false;
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item.key === "string" &&
+    typeof item.note === "string" &&
+    typeof item.is_set === "boolean" &&
+    typeof item.source === "string"
+  );
+}
+
+/** 从生效快照里取出「前端专用配置」那一段。
+ *
+ * 为什么需要它：面板只写仓库根的 `.env`（后端进程读它），前端变量在这里原本
+ * **完全不可见** —— 于是「高德 Web 服务 Key 未配置」很容易被读成「整条地图能力没配」，
+ * 而结果页那张地图用的是另一个 Key。这份状态就是为了把这两件事分开。
+ *
+ * 形状不符时返回 `null`：界面应据此**整块不渲染**，而不是渲染一张空表
+ * （"没有前端配置"与"读不到前端配置状态"是两件事）。
+ */
+export function frontendEnvStatus(effective: Record<string, unknown>): DevFrontendEnv | null {
+  const raw = effective.frontend_env;
+  if (typeof raw !== "object" || raw === null) return null;
+  const candidate = raw as Partial<DevFrontendEnv>;
+  if (!Array.isArray(candidate.keys)) return null;
+  // ★ 逐字段重建，**不做对象展开**：后端要是多回了一个 `value`
+  // （或将来往条目里加了别的字段），也不会被顺手带进界面 ——
+  // 「面板拿不到明文 Key」这条纪律不该依赖后端的自觉。
+  const keys: DevFrontendEnvKey[] = [];
+  for (const item of candidate.keys) {
+    if (!isFrontendEnvKey(item)) continue;
+    keys.push({ key: item.key, note: item.note, is_set: item.is_set, source: item.source });
+  }
+  if (keys.length === 0) return null;
+  return {
+    keys,
+    files: Array.isArray(candidate.files)
+      ? candidate.files.filter((name): name is string => typeof name === "string")
+      : [],
+    editable_here: candidate.editable_here === true,
+    explanation: typeof candidate.explanation === "string" ? candidate.explanation : "",
+  };
 }
 
 function authHeaders(token: string): HeadersInit {

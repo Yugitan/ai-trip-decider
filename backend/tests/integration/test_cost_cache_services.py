@@ -241,6 +241,48 @@ async def test_cost_store_persist_empty_returns_zero(db_session: object) -> None
     assert await CostStore(_session(db_session)).persist([]) == 0
 
 
+async def test_daily_budget_counts_only_today(db_session: object) -> None:
+    """全局日成本只算**今天**（UTC 日历日）—— 这是 PRD §15.4 第四级熔断的依据。
+
+    两个容易写错的地方都在这里钉住：
+    1. 昨天与更早的钱不能算进来（否则新的一天一开始就“预算用完了”）；
+    2. 未来的记录也不能算（时区/时钟偏差会造出这种行）。
+    """
+    session = _session(db_session)
+    store = CostStore(session)
+    now = datetime.now(UTC)
+    await store.persist(
+        [
+            CostEntry(
+                category="llm",
+                provider="deepseek",
+                amount_cny=Decimal("1.500000"),
+                calibrated=True,
+                units=1,
+            )
+        ],
+        request_id=uuid.uuid4(),
+    )
+    # persist 用的是“现在”，所以这笔一定落在今天之内
+    today = await store.daily_budget(limit_cny=20.0, now=now)
+    assert today.spent_cny >= Decimal("1.5")
+    assert today.exceeded is False
+
+    # 把“现在”挪到明天：今天这笔就不该再计入
+    tomorrow = now + timedelta(days=1)
+    assert (await store.daily_budget(limit_cny=20.0, now=tomorrow)).spent_cny == Decimal("0")
+
+    # 上限设成比已花的钱小 → 判定为超限，并且理由里带上两个数
+    tight = await store.daily_budget(limit_cny=0.5, now=now)
+    assert tight.exceeded is True
+    assert "0.50" in tight.degraded_reason()
+
+    # limit <= 0 = 关掉这条限制（不是“预算用完了”）
+    off = await store.daily_budget(limit_cny=0, now=now)
+    assert off.off is True
+    assert off.exceeded is False
+
+
 async def test_cost_summary_uncalibrated_count_respects_window(db_session: object) -> None:
     """未校准记录数必须与按类别的聚合用同一个时间窗。
 

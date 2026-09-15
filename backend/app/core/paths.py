@@ -54,3 +54,7 @@ def docs_dir() -> Path:
 
 def env_file() -> Path:
     return project_root() / ".env"
+
+
+def frontend_dir() -> Path:
+    return project_root() / "frontend"

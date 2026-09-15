@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   changedEnvValues,
   fetchDevConfig,
+  frontendEnvStatus,
   groupEnvFields,
   readAdminToken,
   saveAdminToken,
@@ -12,6 +13,7 @@ import {
   updateDevEnv,
   type DevConfig,
   type DevEnvField,
+  type DevFrontendEnv,
 } from "@/lib/dev-api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -28,7 +30,11 @@ import { Card } from "@/components/ui/card";
  *    —— 空字符串在这两者之间没有第三种解释空间，所以清空得是一个显式动作；
  * 3. 保存结果如实回报（改了哪些键 / 校验失败的原因），不做"看起来保存成功"。
  *    注意保存成功后要**重新拉取**生效状态，但重新拉取不能顺手把提示清掉 ——
- *    "保存成功但看不到反馈"和失败一样难受。
+ *    "保存成功但看不到反馈"和失败一样难受；
+ * 4. **本面板改不到的配置也要能看见**：前端变量（写在 `frontend/.env.local`，
+ *    Next 只读那里）在这里只能只读展示。不展示的后果是真实的：
+ *    在「地图」分组里看到「高德 Web 服务 Key（未配置）」，会让人以为
+ *    结果页那张地图也没配 —— 而那是**另一个 Key**，且可能早就配好了。
  */
 
 const SECRET_PLACEHOLDER = "（已配置，留空表示不修改）";
@@ -43,6 +49,8 @@ export function DevSettings() {
   const [fileDraft, setFileDraft] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  /** 前端专用变量的存在性状态（本面板改不了，但必须看得见）。 */
+  const frontendEnv = config === null ? null : frontendEnvStatus(config.effective);
 
   /** 重新拉取配置；返回是否成功（调用方靠它决定要不要覆盖提示）。
    *
@@ -185,6 +193,11 @@ export function DevSettings() {
               {" / "}
               <code>ENV</code> 刻意不在其中（改它们要么必须重启，要么等于关掉本页面）。
             </p>
+            <p className="mt-1 text-xs text-ink-faint">
+              <strong className="font-semibold text-ink-soft">成本与限流阈值不在这里</strong>
+              ：它们的事务所在处是 <code>config/limits.yaml</code>（下一张卡片可直接改），
+              <code>.env</code> 里那些同名变量只是镜像 —— 摆在这里只会让人改一个不生效的数。
+            </p>
 
             <div className="mt-4 space-y-5">
               {groupEnvFields(config.env).map((group) => (
@@ -219,6 +232,8 @@ export function DevSettings() {
               </span>
             </div>
           </Card>
+
+          {frontendEnv === null ? null : <FrontendEnvCard status={frontendEnv} />}
 
           <Card className="px-5 py-5 sm:px-7">
             <h2 className="text-sm font-semibold text-ink">配置文件（config/*.yaml）</h2>
@@ -278,6 +293,97 @@ export function DevSettings() {
   );
 }
 
+/** 「前端专用配置」：面板改不了，但状态要看得见。
+ *
+ * 这一栏存在的唯一理由，是让「后端那栏是空的」不再被读成「整条能力没配」。
+ * 因此它只陈述两件事：**配了没**、**从哪个文件读到的** —— 不给值，也不给编辑入口。
+ */
+function FrontendEnvCard({ status }: { status: DevFrontendEnv }) {
+  const configured = status.keys.filter((item) => item.is_set);
+  return (
+    <Card className="px-5 py-5 sm:px-7">
+      <h2 className="text-sm font-semibold text-ink">前端专用配置（在这里只读）</h2>
+      <p className="mt-1 text-xs leading-relaxed text-ink-soft">
+        {status.explanation}
+      </p>
+      <p className="mt-1.5 text-xs text-ink-faint tnum">
+        已配置 <strong className="text-ink">{configured.length}</strong> / {status.keys.length} 项
+        （读自 {status.files.join(" → ")}，前者优先）
+      </p>
+
+      <ul className="mt-3 space-y-2">
+        {status.keys.map((item) => (
+          <li
+            key={item.key}
+            className="flex flex-col gap-1 border-t border-line pt-2 text-xs first:border-t-0 first:pt-0 sm:flex-row sm:items-baseline sm:gap-3"
+          >
+            <code className="shrink-0 font-mono text-ink">{item.key}</code>
+            <span className="flex-1 text-ink-faint">{item.note}</span>
+            <span
+              className={`shrink-0 rounded-full border px-2 py-0.5 tnum ${
+                item.is_set
+                  ? "border-teal/30 bg-teal-tint text-teal-dark"
+                  : "border-line text-ink-soft"
+              }`}
+            >
+              {item.is_set ? `已配置 · ${item.source}` : "未配置"}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-3 text-xs leading-relaxed text-ink-faint">
+        要改这些变量：直接编辑 <code>frontend/.env.local</code>，然后重启 <code>pnpm dev</code>
+        （Next 在启动时读取）。面板刻意不代写它 —— 它只负责仓库根的 <code>.env</code>。
+      </p>
+    </Card>
+  );
+}
+
+/** 圆圈感叹号 + 悬停/聚焦/点击提示：这个字段到底是干什么用的。
+ *
+ * 为什么不用 `title` 属性：它只在鼠标悬停时出现、样式不可控、键盘完全摸不到，
+ * 而"这个字段有什么用"恰好是面板里最需要能读到的东西。
+ * 这里把说明**常驻在 DOM 里**（`role="tooltip"` + `aria-describedby`）：
+ * 鼠标能看、键盘 Tab 能看、屏幕阅读器能读、连 Ctrl+F 都能搜到。
+ * 触发元素做成真正的 `<button>` 并按一下开合 —— 一是不做"按了没反应"的假按钮，
+ * 二是触屏（没有悬停）也有办法看到提示。
+ * 说明文字只有一个出处：后端 `ENV_FIELDS` 的 `hint`，界面不另外抄一份。
+ */
+function InfoTip({ text, target }: { text: string; target: string }) {
+  const [open, setOpen] = useState(false);
+  const id = `tip-${target}`;
+  return (
+    <span className="group/tip relative mt-0.5 inline-flex shrink-0 align-middle font-normal">
+      <button
+        type="button"
+        // 刻意**不**把字段名写进按钮的无障碍名字：那样屏幕上就会出现两个
+        // "DEEPSEEK_API_KEY"（输入框与这个按钮），屏幕阅读器与 `getByLabelText`
+        // 都会分不清。控件本身的说明走 `aria-describedby`，按钮只管开合提示。
+        aria-label="字段说明"
+        aria-describedby={id}
+        aria-expanded={open}
+        data-testid={`tip-trigger-${target}`}
+        onClick={() => setOpen((current) => !current)}
+        className="inline-flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-line text-[10px] font-semibold leading-none text-ink-soft transition-colors group-hover/tip:border-teal group-hover/tip:bg-teal-tint group-hover/tip:text-teal-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal"
+      >
+        !
+      </button>
+      <span
+        id={id}
+        role="tooltip"
+        className={`pointer-events-none absolute top-5 right-0 z-20 w-64 rounded-[10px] border border-line bg-shell px-3 py-2 text-left text-[11px] font-normal leading-relaxed text-ink-soft shadow-lift transition-opacity ${
+          open
+            ? "visible opacity-100"
+            : "invisible opacity-0 group-hover/tip:visible group-hover/tip:opacity-100 group-focus-within/tip:visible group-focus-within/tip:opacity-100"
+        }`}
+      >
+        {text}
+      </span>
+    </span>
+  );
+}
+
 function EnvInput({
   field,
   draft,
@@ -293,15 +399,23 @@ function EnvInput({
 }) {
   const value = draft ?? (field.kind === "secret" ? "" : field.value);
   const canClear = field.kind === "secret" && field.is_set;
+  /** 控件与提示共用的 id：`aria-describedby` 让字段被读到时**自动带上说明**，
+   * 不要求用户先去悬停/点击那个圈感叹号。 */
+  const tipId = field.hint === "" ? undefined : `tip-${field.key}`;
 
   return (
     <div className="text-xs font-medium text-ink-soft">
-      <label>
-        {field.label}
-        <span className="ml-1.5 font-normal text-ink-faint">{field.key}</span>
-        {field.choices.length > 0 ? (
+      {/* ★ 圈感叹号**必须放在 `<label>` 外面**：`<label>` 里的可交互元素会被算进
+          控件的无障碍名字（屏幕阅读器会把输入框读成"…DEEPSEEK_API_KEY 字段说明"），
+          同一个字段也会因此查出两个 "label"。说明与控件靠 `aria-describedby` 连。 */}
+      <div className="flex items-start gap-1">
+        <label className="min-w-0 flex-1">
+          {field.label}
+          <span className="ml-1.5 font-normal text-ink-faint">{field.key}</span>
+          {field.choices.length > 0 ? (
           <select
             aria-label={field.key}
+            aria-describedby={tipId}
             value={value}
             onChange={(event) => onChange(event.currentTarget.value)}
             className="mt-1.5 w-full rounded-btn border border-line bg-shell px-3 py-2 text-sm text-ink outline-none focus:border-teal"
@@ -316,6 +430,7 @@ function EnvInput({
         ) : (
           <input
             aria-label={field.key}
+            aria-describedby={tipId}
             type={field.kind === "secret" ? "password" : "text"}
             value={cleared ? "" : value}
             disabled={cleared}
@@ -330,11 +445,9 @@ function EnvInput({
             className="mt-1.5 w-full rounded-btn border border-line bg-shell px-3 py-2 text-sm text-ink outline-none focus:border-teal disabled:opacity-50"
           />
         )}
-      </label>
-
-      {field.hint === "" ? null : (
-        <span className="mt-1 block font-normal text-ink-faint">{field.hint}</span>
-      )}
+        </label>
+        {field.hint === "" ? null : <InfoTip text={field.hint} target={field.key} />}
+      </div>
 
       {canClear ? (
         <span className="mt-1 flex flex-wrap items-center gap-2 font-normal text-ink-faint">

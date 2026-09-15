@@ -21,6 +21,7 @@ from app.core.config import (
     get_ttl_config,
 )
 from app.db.session import get_db
+from app.services.cost import CostStore
 
 router = APIRouter(tags=["health"])
 
@@ -48,7 +49,36 @@ async def _db_probe(db: AsyncSession) -> dict[str, object]:
     return info
 
 
-def _payload(db_info: dict[str, object]) -> dict[str, object]:
+async def _cost_probe(db: AsyncSession) -> dict[str, object]:
+    """今天的累计支出与「全局日成本」额度状态（PRD §15.4 第四级熔断）。
+
+    ★ 为什么要报它 ★
+    `config/limits.yaml` 的 `cost.global_daily_cny` 曾经**没有任何代码读它** ——
+    一个拦不住支出的阈值比没有更危险：看到它会以为已经有兜底。
+    现在规划链会据此进「缓存优先模式」，而这里把那件事如实报出来。
+
+    库连不上时 `budget_exceeded` 返回 **None（不知道）**而不是 False（没超）——
+    与本项目一贯的「null ≠ 0」同一条规矩。
+    """
+    limit_cny = get_limits_config().cost.global_daily_cny
+    try:
+        budget = await CostStore(db).daily_budget(limit_cny=limit_cny)
+    except Exception as exc:
+        return {
+            "daily_spend_cny": None,
+            "global_daily_budget_cny": limit_cny,
+            "budget_exceeded": None,
+            "unavailable": type(exc).__name__,
+        }
+    return {
+        "daily_spend_cny": str(budget.spent_cny),
+        "global_daily_budget_cny": budget.limit_cny,
+        "budget_exceeded": budget.exceeded,
+        "disabled_by_config": budget.off,
+    }
+
+
+def _payload(db_info: dict[str, object], cost_info: dict[str, object]) -> dict[str, object]:
     settings = get_settings()
     pricing = get_pricing_config()
     schema_state = "ok" if db_info.get("schema_ready") else "migration_pending"
@@ -73,10 +103,17 @@ def _payload(db_info: dict[str, object]) -> dict[str, object]:
             # 关键：单价未校准时必须显式暴露，避免成本报表被误读为真实支出
             "pricing_calibrated": pricing.is_fully_calibrated,
         },
+        # ★ 这里必须报**真正在熔断的那两个值**。
+        # 熔断器读的是 `config/limits.yaml`（`plan_service` 里
+        # `breaker=limits.cost.circuit_breaker`），而 `Settings` 里的同名变量只是个
+        # 镜像 —— 曾经报的是后者，于是把环境变量改成 99 会让 /health 兴高采烈地显示
+        # “99 元熔断”，而实际仍然在 1 元处被拦下。
+        # 两个默认值恰好相等（1.0 / 0.30）才一直没人发现。
         "cost_breakers": {
-            "plan_total_cny": settings.plan_cost_circuit_breaker_cny,
-            "plan_search_cny": settings.search_cost_circuit_breaker_cny,
+            "plan_total_cny": get_limits_config().cost.circuit_breaker.plan_total_cny,
+            "plan_search_cny": get_limits_config().cost.circuit_breaker.plan_search_cny,
         },
+        "cost": cost_info,
     }
 
 
@@ -85,7 +122,8 @@ async def health(db: AsyncSession = Depends(get_db)) -> dict[str, object]:
     from app.schemas.common import ApiMeta, ok_envelope
 
     db_info = await _db_probe(db)
-    return ok_envelope(_payload(db_info), ApiMeta())
+    cost_info = await _cost_probe(db)
+    return ok_envelope(_payload(db_info, cost_info), ApiMeta())
 
 
 @router.get("/health/ready", response_model=None)
@@ -95,7 +133,9 @@ async def ready(db: AsyncSession = Depends(get_db)) -> dict[str, object]:
     from app.schemas.common import ApiMeta, ok_envelope
 
     db_info = await _db_probe(db)
-    payload = _payload(db_info)
+    # 就绪探针只关心"能不能接流量"，日成本不参与判定，但报出来不会有坏处：
+    # 它同样是"现在到底能干什么"的一部分，而且库已经查过一次了。
+    payload = _payload(db_info, await _cost_probe(db))
     body = ok_envelope(payload, ApiMeta())
     if payload["status"] != "ok":
         return JSONResponse(status_code=503, content=body)  # type: ignore[return-value]

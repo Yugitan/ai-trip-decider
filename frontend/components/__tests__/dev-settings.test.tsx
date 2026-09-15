@@ -52,7 +52,12 @@ function field(overrides: Partial<DevEnvField>): DevEnvField {
 
 const CONFIG: DevConfig = {
   env: [
-    field({ key: "LLM_PROVIDER", label: "LLM Provider", choices: ["deepseek", "null"] }),
+    field({
+      key: "LLM_PROVIDER",
+      label: "LLM Provider",
+      choices: ["deepseek", "null"],
+      hint: "无 Key 时自动降级为规则引擎",
+    }),
     field({
       key: "DEEPSEEK_API_KEY",
       label: "DeepSeek Key",
@@ -60,7 +65,9 @@ const CONFIG: DevConfig = {
       kind: "secret",
       is_set: true,
       value: "sk-••••1234",
+      hint: "填上才会真正调用模型",
     }),
+    // 没写 hint 的字段不该出现圈感叹号（一个空的提示比没有提示更差）
     field({
       key: "TAVILY_API_KEY",
       label: "Tavily Key",
@@ -74,7 +81,29 @@ const CONFIG: DevConfig = {
     { name: "pricing.yaml", content: "llm:\n  deepseek-flash:\n    input: 1\n" },
     { name: "routing.yaml", content: "routing:\n  walk_speed_kmh: 4.5\n" },
   ],
-  effective: { llm_provider: "deepseek", env: "development" },
+  effective: {
+    llm_provider: "deepseek",
+    env: "development",
+    frontend_env: {
+      keys: [
+        {
+          key: "NEXT_PUBLIC_AMAP_JS_KEY",
+          note: "结果页的站点示意图（浏览器加载高德 JS API 用）",
+          is_set: true,
+          source: "frontend/.env.local",
+        },
+        {
+          key: "AMAP_SECURITY_CODE",
+          note: "高德安全密钥；只在服务端代理里补 jscode，不进前端产物",
+          is_set: false,
+          source: "",
+        },
+      ],
+      files: ["frontend/.env.local", "frontend/.env"],
+      editable_here: false,
+      explanation: "这些变量写在 frontend/.env.local，Next.js 只读那里；本面板改的是仓库根的 .env。",
+    },
+  },
   notice: "开发模式：接口只在 ENV=development 时注册。",
 };
 
@@ -245,5 +274,87 @@ describe("开发设置面板", () => {
 
     const snapshot = screen.getByTestId("effective-config");
     expect(within(snapshot).getByText(/llm_provider/)).toBeInTheDocument();
+  });
+
+  it("★ 每个字段都有一个圈感叹号，说明就来自后端那句 hint（不另抄一份）", async () => {
+    await renderPanel();
+
+    const trigger = screen.getByTestId("tip-trigger-LLM_PROVIDER");
+    const tooltipId = trigger.getAttribute("aria-describedby");
+    expect(tooltipId).toBe("tip-LLM_PROVIDER");
+
+    // 说明常驻在 DOM 里（不是只在悬停时才插进去）：键盘、屏幕阅读器、Ctrl+F 都摸得到
+    const tooltip = document.getElementById("tip-LLM_PROVIDER");
+    expect(tooltip).toHaveAttribute("role", "tooltip");
+    expect(tooltip).toHaveTextContent("无 Key 时自动降级为规则引擎");
+
+    // ★ 控件自己 `aria-describedby` 到同一段说明：字段被读到时说明就在，
+    // 不要求用户先摸到那个圈感叹号（也不是只在悬停时才出现）
+    expect(screen.getByLabelText(/LLM Provider/)).toHaveAttribute(
+      "aria-describedby",
+      "tip-LLM_PROVIDER",
+    );
+    expect(screen.getByLabelText(/DEEPSEEK_API_KEY/)).toHaveAttribute(
+      "aria-describedby",
+      "tip-DEEPSEEK_API_KEY",
+    );
+    // 没有说明的字段就不会被描述（而不是指向一个不存在的 id）
+    expect(screen.getByLabelText(/TAVILY_API_KEY/)).not.toHaveAttribute("aria-describedby");
+
+    // 没有说明的字段不该出现一个空提示
+    expect(screen.queryByTestId("tip-trigger-TAVILY_API_KEY")).toBeNull();
+  });
+
+  it("圈感叹号点一下能开合（触屏没有悬停，只能靠点击）", async () => {
+    const user = userEvent.setup();
+    await renderPanel();
+
+    const trigger = screen.getByTestId("tip-trigger-DEEPSEEK_API_KEY");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("点击圈感叹号不会顺手改动字段值（它是说明，不是控件）", async () => {
+    const user = userEvent.setup();
+    await renderPanel();
+
+    await user.click(screen.getByTestId("tip-trigger-LLM_PROVIDER"));
+    await user.click(screen.getByRole("button", { name: "保存环境变量" }));
+
+    expect(updateDevEnv).not.toHaveBeenCalled();
+  });
+
+  it("★ 前端专用配置单独一栏：说清「本面板改不了」与各自配没配", async () => {
+    await renderPanel();
+
+    // 这一栏存在的理由：面板上「高德 Web 服务 Key（未配置）」不该被读成「地图整体没配」
+    const heading = screen.getByRole("heading", { name: "前端专用配置（在这里只读）" });
+    // 限定在这一张卡里查：生效快照那段 JSON 里也嵌着同一个 explanation
+    const card = within(heading.parentElement as HTMLElement);
+    expect(card.getByText(/Next\.js 只读那里/)).toBeInTheDocument();
+
+    expect(card.getByText("NEXT_PUBLIC_AMAP_JS_KEY")).toBeInTheDocument();
+    expect(card.getByText("已配置 · frontend/.env.local")).toBeInTheDocument();
+    expect(card.getByText("未配置")).toBeInTheDocument();
+    expect(card.getByText(/要改这些变量：直接编辑/)).toBeInTheDocument();
+
+    // 只读：这里没有输入框，也没有保存按钮
+    expect(screen.queryByLabelText(/NEXT_PUBLIC_AMAP_JS_KEY/)).toBeNull();
+  });
+
+  it("后端没给前端配置状态时整块不渲染（而不是画一张空表）", async () => {
+    fetchDevConfig.mockResolvedValue({ ...CONFIG, effective: { env: "development" } });
+    await renderPanel();
+
+    expect(
+      screen.queryByRole("heading", { name: "前端专用配置（在这里只读）" }),
+    ).toBeNull();
+    // 其余部分照常呈现：少一块不代表整页坏掉
+    expect(screen.getByRole("heading", { name: "环境变量" })).toBeInTheDocument();
   });
 });

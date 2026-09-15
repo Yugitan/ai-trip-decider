@@ -10,12 +10,15 @@
 
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 import pytest
 
 from app.core.config import clear_config_cache
 from app.core.errors import AppError
+from app.core.paths import backend_dir, project_root
 from app.services import dev_config
 
 pytestmark = pytest.mark.unit
@@ -220,6 +223,7 @@ def test_effective_snapshot_exposes_runtime_truth() -> None:
     assert set(snapshot) == {
         "env",
         "providers",
+        "frontend_env",
         "llm",
         "cost_limits",
         "rate_limits",
@@ -231,4 +235,200 @@ def test_effective_snapshot_exposes_runtime_truth() -> None:
     assert isinstance(snapshot["llm"]["secret_configured"], bool)
     assert "api_key" not in str(snapshot["llm"]).lower() or "secret_configured" in str(
         snapshot["llm"]
+    )
+
+
+# ── 前端专用变量（面板改不到，但必须看得见）────────────────────────────────
+
+_FRONTEND_TEMPLATE = """# 前端模板（只读的说明文字里带等号也不会被当成变量）
+NEXT_PUBLIC_AMAP_JS_KEY=
+
+# ── 后端地址 ──
+# API_BASE_URL=http://127.0.0.1:8000
+#   API_BASE_URL            （无前缀 = 服务端）
+AMAP_SECURITY_CODE=
+"""
+
+
+def _frontend_dir(tmp_path: Path, *, local: str = "", base: str = "") -> Path:
+    directory = tmp_path / "frontend"
+    directory.mkdir(exist_ok=True)
+    (directory / ".env.example").write_text(_FRONTEND_TEMPLATE, encoding="utf-8")
+    if local:
+        (directory / ".env.local").write_text(local, encoding="utf-8")
+    if base:
+        (directory / ".env").write_text(base, encoding="utf-8")
+    return directory
+
+
+def test_frontend_env_status_reports_presence_without_values(tmp_path: Path) -> None:
+    """★ 面板只回答「配了没」与「从哪个文件读到的」，**不返回值** ——
+    Secret 的只写不读是同一条纪律，前端变量不该成为那个例外。
+    """
+    # 用一个**一眼就是假的**值：真实 Key 从不进仓库（这条断言本身就是在守它）
+    directory = _frontend_dir(
+        tmp_path, local="NEXT_PUBLIC_AMAP_JS_KEY=not-a-real-key-0123456789\n"
+    )
+
+    status = dev_config.frontend_env_status(directory=directory)
+    by_key = {item["key"]: item for item in status["keys"]}
+
+    assert by_key["NEXT_PUBLIC_AMAP_JS_KEY"]["is_set"] is True
+    assert by_key["NEXT_PUBLIC_AMAP_JS_KEY"]["source"] == "frontend/.env.local"
+    assert by_key["AMAP_SECURITY_CODE"]["is_set"] is False
+    assert by_key["AMAP_SECURITY_CODE"]["source"] == ""
+    assert status["editable_here"] is False
+    assert "not-a-real-key" not in json.dumps(status, ensure_ascii=False), "值绝不能出现在响应里"
+
+
+def test_frontend_env_status_keys_come_from_the_template(tmp_path: Path) -> None:
+    """名单以 `frontend/.env.example` 为准（前端配置的唯一事实源），不另存一份。
+
+    顺便钉住一件事：模板里的**注释说明**（行中间带等号）不会被误当成变量名。
+    """
+    keys = [
+        item["key"]
+        for item in dev_config.frontend_env_status(directory=_frontend_dir(tmp_path))["keys"]
+    ]
+    assert keys == ["NEXT_PUBLIC_AMAP_JS_KEY", "API_BASE_URL", "AMAP_SECURITY_CODE"]
+
+
+def test_frontend_env_local_wins_over_plain_env(tmp_path: Path) -> None:
+    """`.env.local` 优先（与 Next 的读取顺序一致），并如实标出来源。"""
+    directory = _frontend_dir(
+        tmp_path,
+        local="AMAP_SECURITY_CODE=from-local\n",
+        base="AMAP_SECURITY_CODE=from-base\nNEXT_PUBLIC_AMAP_JS_KEY=from-base\n",
+    )
+
+    by_key = {
+        item["key"]: item
+        for item in dev_config.frontend_env_status(directory=directory)["keys"]
+    }
+
+    assert by_key["AMAP_SECURITY_CODE"]["source"] == "frontend/.env.local"
+    assert by_key["NEXT_PUBLIC_AMAP_JS_KEY"]["source"] == "frontend/.env"
+
+
+def test_frontend_env_status_survives_a_directory_without_template(tmp_path: Path) -> None:
+    """目录/文件都不存在时返回空清单，而不是让整个面板首屏 500。"""
+    status = dev_config.frontend_env_status(directory=tmp_path / "不存在")
+    assert status["keys"] == []
+    assert "frontend/.env.local" in status["files"]
+
+
+def test_frontend_env_notes_have_no_stale_keys() -> None:
+    """说明表里不能有前端模板里不存在的键 —— 否则面板就在为一个不存在的变量编说明。"""
+    real_keys = {item["key"] for item in dev_config.frontend_env_status()["keys"]}
+    stale = sorted(set(dev_config.FRONTEND_ENV_NOTES) - real_keys)
+    assert not stale, f"这些键只在说明表里、前端模板里没有：{stale}"
+
+
+def _keys_nobody_reads() -> set[str]:
+    """扫源码得出「面板能改、但没有任何代码读」的键。
+
+    只排除面板自己（`dev_config.py`）—— 它列出这些键不算「被使用」。
+    对每个键找两种痕迹：Settings 属性访问（``.attr``，声明行不会命中）
+    与直接在字符串里写的键名（`os.environ["KEY"]` 那种）。
+    """
+    sources: list[str] = []
+    for root in (backend_dir() / "app", project_root() / "scripts"):
+        for path in root.rglob("*.py"):
+            if path.name == "dev_config.py":
+                continue
+            sources.append(path.read_text(encoding="utf-8"))
+
+    unread: set[str] = set()
+    for field in dev_config.ENV_FIELDS:
+        pattern = re.compile(rf"\.{re.escape(field.key.lower())}\b")
+        if not any(
+            pattern.search(text) or f'"{field.key}"' in text or f"'{field.key}'" in text
+            for text in sources
+        ):
+            unread.add(field.key)
+    return unread
+
+
+def test_unwired_knobs_are_declared_correctly() -> None:
+    """★ 面板上的旋钮必须真能拧动什么，转不动就必须说出口。
+
+    两个方向都查：声明了却其实有人读（该把声明去掉），
+    以及没人读却忘了声明（该补上）—— 只查一边的话，
+    新加一个空旋钮照样是绿的。
+    """
+    detected = _keys_nobody_reads()
+    declared = set(dev_config.INEFFECTIVE_ENV_KEYS)
+
+    assert detected == declared, (
+        "面板白名单与实际消费方对不上：\n"
+        f"  没人读但没声明：{sorted(detected - declared)}\n"
+        f"  声明了但有人读：{sorted(declared - detected)}\n"
+        "要么把它接上，要么加进 INEFFECTIVE_ENV_KEYS 并写明为什么，"
+        "要么直接从白名单移除（它的真正归属可能在 config/limits.yaml）。"
+    )
+    assert declared <= {field.key for field in dev_config.ENV_FIELDS}, "声明表里有不存在的键"
+
+
+def test_unwired_knobs_say_so_in_their_hint() -> None:
+    """声明为“改了不生效”的键，它的提示必须写出来 —— 否则面板就是在一个空旋钮上骗人。"""
+    hints = {field.key: field.hint for field in dev_config.ENV_FIELDS}
+    silent = sorted(
+        key
+        for key in dev_config.INEFFECTIVE_ENV_KEYS
+        if dev_config.INEFFECTIVE_HINT_MARKER not in hints.get(key, "")
+    )
+    assert not silent, f"这些键改了不生效，但提示里没说：{silent}"
+
+
+def test_cost_knobs_live_in_limits_yaml_not_in_the_env_panel() -> None:
+    """★ 成本与限流阈值只有**一个**归属：`config/limits.yaml`。
+
+    以前 `.env` 里还有一套同名镜像（`PLAN_COST_CIRCUIT_BREAKER_CNY` 等）摆在面板上，
+    改了却不生效 —— 而且其中一个还让 `/health` 报了错的熔断阈值。
+    现在这些键从面板白名单移除了，面板通过编辑 `limits.yaml` 改它们。
+
+    这条测试反过来锁住那个方向：谁把镜像键又加回白名单，这里就会红，
+    提醒他先回答“到底哪个才是事实源”。
+    """
+    panel_keys = {field.key for field in dev_config.ENV_FIELDS}
+    mirrors = {
+        "PLAN_COST_CIRCUIT_BREAKER_CNY",
+        "SEARCH_COST_CIRCUIT_BREAKER_CNY",
+        "GLOBAL_DAILY_BUDGET_CNY",
+        "RATE_LIMIT_COLD_PLANS_PER_DAY",
+        "MAP_MAX_CALLS_PER_PLAN",
+        "BACKEND_PORT",
+        "API_BASE_URL",
+    }
+    assert not (mirrors & panel_keys), (
+        "这些键的真正归属不在 .env（见注释），不该出现在面板的环境变量区："
+        f"{sorted(mirrors & panel_keys)}"
+    )
+
+
+def test_every_knob_has_some_explanation() -> None:
+    """每个字段都得有一句「这是干什么的」：空提示的字段在界面上就是一个没有说明的框。"""
+    silent = sorted(field.key for field in dev_config.ENV_FIELDS if not field.hint)
+    assert not silent, f"这些字段没有任何说明：{silent}"
+
+
+def test_map_hints_separate_backend_routing_from_the_frontend_map() -> None:
+    """★ 两把高德 Key 必须能被**分开读到**，这是面板上真实发生过的一次误判。
+
+    起因：在「地图」分组里看见「高德 Web 服务 Key（未配置）」，
+    于是以为整条地图能力都没配 —— 而结果页那张地图用的是另一把
+    「Web端(JS API)」Key，且可能早就配好了。
+
+    只要这两句话还在，误判就不会重演；谁把两把 Key 合回一句，这条测试就红。
+    """
+    fields = {field.key: field for field in dev_config.ENV_FIELDS}
+
+    web_key = fields["AMAP_WEB_KEY"]
+    assert "Web服务" in web_key.hint, "要写清这把是哪种类型的 Key"
+    assert "frontend/.env.local" in web_key.hint, "要指明另一把 Key 在哪"
+    assert "前端专用配置" in web_key.hint, "要指向面板上那一栏（否则用户还是只看见一栏）"
+
+    provider = fields["MAP_PROVIDER"]
+    assert "前端" in provider.hint and "后端" in provider.hint, (
+        "Provider 选择只影响后端路由，界面必须说清，否则会以为改它就能换掉结果页那张地图"
     )

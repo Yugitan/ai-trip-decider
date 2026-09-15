@@ -337,8 +337,15 @@ class PlanService:
             breaker=self.limits.cost.circuit_breaker,
             providers=self.limits.providers,
         )
+        # ★ PRD §15.4 第四级熔断：全局日成本超限 ⇒ 进入「缓存优先模式」（不调模型/不联网）★
+        # 判断必须在**建链之前**：链一旦跑起来钱就已经花了。
+        # 「单次规划」的熔断器只看本次，看不住一天里很多次堆起来的账单 —— 这一级才是兜底。
+        budget = await CostStore(self.db).daily_budget(
+            limit_cny=self.limits.cost.global_daily_cny
+        )
         trace = LlmTrace(
-            enabled=self.providers.llm.health().available,
+            # 预算用完就明确不调，不是"降级然后碰碰运气"
+            enabled=self.providers.llm.health().available and not budget.exceeded,
             provider=self.providers.llm.name,
         )
         chain = self._build_chain(city.id, ledger=ledger)
@@ -414,6 +421,9 @@ class PlanService:
         await self._enforce_rate_limits(rate_limit_keys)
 
         degraded: list[str] = []
+        if budget.exceeded:
+            # 说出来：钱花完了才降级，与"本来就没配 Key"是两件事
+            degraded.append(budget.degraded_reason())
 
         places = await self._resolve_places(chain, city, degraded)
         if not places:

@@ -32,13 +32,53 @@ __all__ = [
     "CostEntry",
     "CostLedger",
     "CostStore",
+    "DailyBudget",
     "Price",
     "PriceBook",
+    "compare_daily_budget",
 ]
 
 log = get_logger("cost")
 
 BreakerKind = Literal["plan", "search", "map", "llm"]
+
+
+def compare_daily_budget(spent_cny: Decimal, limit_cny: float) -> bool:
+    """今天的累计支出是否已用完「全局日成本」额度（PRD §15.4 第四级熔断）。
+
+    和 ``rate_limit`` 同一个口径：``limit <= 0`` 视为**不设上限**，
+    让"关掉这条限制"不需要改代码。
+
+    为什么不能靠 ``CostLedger`` 的熔断器代劳：那个账本一次规划一份，
+    **只看得住一次**；而真正的账单失控是"一天里很多次"堆起来的。
+    """
+    if limit_cny <= 0:
+        return False
+    return spent_cny >= Decimal(str(limit_cny))
+
+
+@dataclass(frozen=True, slots=True)
+class DailyBudget:
+    """全局日成本的当前状态（供规划链与 `/health` 共用同一份事实）。"""
+
+    spent_cny: Decimal
+    limit_cny: float
+
+    @property
+    def off(self) -> bool:
+        """``limit <= 0``：配置里把这条限制关掉了（不是"预算用完了"）。"""
+        return self.limit_cny <= 0
+
+    @property
+    def exceeded(self) -> bool:
+        return compare_daily_budget(self.spent_cny, self.limit_cny)
+
+    def degraded_reason(self) -> str:
+        """降级清单里那句话。金额与上限都要写出来 —— "超预算了"没用，"花了 20.4/20"才有用。"""
+        return (
+            f"cost:global_daily_budget(今日已花 {self.spent_cny:.4f} 元，"
+            f"上限 {self.limit_cny:.2f} 元：本次只走本地与缓存，不调模型/联网)"
+        )
 CostCategory = Literal["search", "llm", "map", "geocode", "tiles", "other"]
 
 _ZERO = Decimal("0")
@@ -319,6 +359,24 @@ class CostStore:
             )
         await self.session.flush()
         return len(entries)
+
+    async def daily_budget(self, *, limit_cny: float, now: datetime | None = None) -> DailyBudget:
+        """今天的累计支出与上限（PRD §15.4 的第四级熔断靠它判断）。
+
+        "今天"按 **UTC 日历日** 算（与 ``cost_logs.created_at`` 的口径一致）——
+        刻意不用本地时区：服务器时区一变，同一批数据会突然换一天，
+        而预算这件事最不能允许的就是"数字因为部署位置而不同"。
+        """
+        moment = now or datetime.now(UTC)
+        day_start = moment.replace(hour=0, minute=0, second=0, microsecond=0)
+        spent = (
+            await self.session.execute(
+                select(func.coalesce(func.sum(CostLog.amount_cny), 0)).where(
+                    CostLog.created_at >= day_start
+                )
+            )
+        ).scalar_one()
+        return DailyBudget(spent_cny=Decimal(str(spent)), limit_cny=limit_cny)
 
     async def summary(self, *, days: int = 7) -> dict[str, Any]:
         """近 N 天的成本汇总。**未校准的金额会被显式标注**，不做静默美化。"""

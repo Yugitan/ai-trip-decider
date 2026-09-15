@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -167,6 +167,75 @@ def client(_prepared_test_db: None) -> Iterator[TestClient]:
 
     with TestClient(create_app()) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def cost_row_factory() -> Iterator[Callable[[str], int]]:
+    """往**今天**的 `cost_logs` 里插一笔钱（已提交），返回行 id；用例结束自动删掉。
+
+    ★ 为什么必须提交 ★
+    全局日成本是**跨会话**的账：计的是整个站点今天花了多少。
+    写在未提交的事务里，请求自己的连接根本看不见，测试就成了自欺。
+    代价是要自己收拾 —— 所以这里把「插进去」和「删干净」绑成一个夹具，
+    用例不管怎么结束（包括断言失败）都不会留下痕迹。
+    """
+    from decimal import Decimal
+
+    from sqlalchemy import delete, insert
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from app.db.models import CostLog
+
+    created: list[int] = []
+
+    def create(amount_cny: str) -> int:
+        row_id: int = 0
+
+        async def run() -> None:
+            nonlocal row_id
+            engine = create_async_engine(TEST_DATABASE_URL)
+            try:
+                async with engine.begin() as conn:
+                    row_id = int(
+                        (
+                            await conn.execute(
+                                insert(CostLog)
+                                .values(
+                                    category="llm",
+                                    provider="deepseek",
+                                    operation="plan_narrative",
+                                    units=1,
+                                    unit_price=Decimal(amount_cny),
+                                    amount_cny=Decimal(amount_cny),
+                                    cache_hit=False,
+                                    pricing_calibrated=True,
+                                )
+                                .returning(CostLog.id)
+                            )
+                        ).scalar_one()
+                    )
+            finally:
+                await engine.dispose()
+
+        asyncio.run(run())
+        created.append(row_id)
+        return row_id
+
+    try:
+        yield create
+    finally:
+        # 没插过东西就不必连库（大多数用例用不到这个夹具）
+        if created:
+
+            async def cleanup() -> None:
+                engine = create_async_engine(TEST_DATABASE_URL)
+                try:
+                    async with engine.begin() as conn:
+                        await conn.execute(delete(CostLog).where(CostLog.id.in_(created)))
+                finally:
+                    await engine.dispose()
+
+            asyncio.run(cleanup())
 
 
 @pytest.fixture

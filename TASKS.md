@@ -1,7 +1,9 @@
 # TASKS.md — 任务清单与完成状态
 
-> 最后更新：2026-09-12
-> 当前进度：**M0 脚手架 + M1 广州知识库 + M2 领域内核 + M3 Provider 与检索链 + M4 规划编排与 API 已完成**（M5–M8 见 `PRD.md` §27）
+> 最后更新：2026-09-14
+> 当前进度：**M0 脚手架 + M1 广州知识库 + M2 领域内核 + M3 Provider 与检索链 + M4 规划编排与 API 已完成；
+> M5 前端结果页进行中**（首页提交 → 三套方案时间线 → 改路线 / 撤销 / 分享 / 地图已可用；
+> 地图需配 `NEXT_PUBLIC_AMAP_JS_KEY`；还剩方案对比视图、结果页自己的 URL）（M5–M8 见 `PRD.md` §27）
 
 状态图例：✅ 完成并已验证 · 🟡 部分完成 · ⏳ 未开始 · ⛔ 被外部条件阻塞
 
@@ -145,7 +147,7 @@
 | B4 | 真实路网关系覆盖仅约 3% | ⛔ | 公共 OSRM 的 table 服务批量上限所致；需自建 OSRM 或商业服务 |
 | B5 | 路线预算留空 | 🟡 | 没有可靠的餐饮/门票价格来源，**刻意不填估算值**（有测试守住） |
 | B6 | 营业时间结构化解析 | ⏳ | `opening_hours_raw` 原文已存，`opening_hours` 列留 NULL 并记入 `unknown_fields`；解析器属 M2 |
-| B7 | DeepSeek / 高德 Key 未提供 | 🟡 | 两个 Provider 只经过 respx 契约测试，**未在真实 Key 下验证**；已在文件头显式标注。无 Key 时自动降级为 null / osrm，不影响端到端运行 |
+| B7 | 第三方 Key 的真实调用验证 | 🟡 部分解除 | **DeepSeek**：M4 已实跑（11 次真实调用，见 `docs/COST_REPORT.md`）。**Tavily**：2026-09-14 已配 Key 并活体验证（`tests/integration/test_search_live.py`，3 条）。**高德**：拿到的是 **Web端(JS API)** 类型的 Key（实测调 Web服务接口返回 `USERKEY_PLAT_NOMATCH`），已在真实浏览器里验证地图渲染（`RUNNING.md` §8.7）；**后端路由仍缺 Web服务类型的 Key**，`map_provider_effective` 依旧是 `osrm` |
 | B8 | `pricing.yaml` 的 DeepSeek 单价仍是 `null` | 🟡 | 官方价目页 JS 渲染抓不到。影响：成本报表 LLM 一栏只有 token 数、没有金额。**首次真实调用前必须回填**（已写在配置顶部校准流程 + 文件头注释） |
 | ~~B9~~ | ~~前端覆盖率提供商装不上~~ | ✅ 已解决 | `pnpm add -D @vitest/coverage-v8@3.2.4` 装上了；`make test-frontend-cov` 现在真出报告（98.56%）并带闸门，已接进 `make check` |
 
@@ -558,6 +560,190 @@ release 已到 `v10.1.0` —— 写 `@v10` 会让 job 在 “Set up job” 就�
   而环境变量在 make 里优先于 `?=`；为 CI 改默认值等于让本地也多一处要维护的分支。
 - **代价写进文档，不藏起来**：`make fetch-osm` 重跑会改动两份已跟踪的 JSON
   （数据变了应当被看见，而不是被 gitignore 藏起来）；CI 与本地唯一有意的差异就是那三行准备步骤。
+
+---
+
+## M5 起步补充（2026-09-14）：结果页地图 · 搜索 Provider 诚实性 · 两个隐性输入
+
+> 触发自一次真实配置：用户提供了**高德 Web端(JS API) Key** 与 **Tavily Key**。
+> 「配 Key」本身没什么可写，但它把两类东西照出来了：一个是**配置说一套、实现跑一套**，
+> 另一个是**测试偷偷读了开发机的环境**。
+
+### 一、搜索结果页的站点示意图
+
+| # | 任务 | 状态 | 证据 |
+| --- | --- | --- | --- |
+| M5-1 | 坐标纠偏 `lib/amap-coords.ts`（WGS-84 → GCJ-02，纯函数） | ✅ | 库里的坐标全来自 OSM（WGS-84），高德瓦片是 GCJ-02；不换则每点偏 100–700 米 |
+| M5-2 | 装载器 `lib/amap.ts`（**先设 `serviceHost` 再插脚本**） | ✅ | 顺序错了安全配置无效（官方文档明写）—— 有测试在 `appendChild` 那一刻取快照钉住顺序 |
+| M5-3 | 安全密钥不走浏览器：`app/amap-proxy` + `next.config.ts` rewrite | ✅ | 客户端自带 `jscode=ATTACKER` 被服务端覆盖：`sec_code` 与「用真密钥直连高德」逐字符相同；生产构建里密钥出现 **0** 次 |
+| M5-4 | 结果页组件 `components/route-map.tsx` 接入每套方案卡片 | ✅ | 编号标记 + 虚线（图注写明**不是实际行车路线**）；无 Key / 加载失败 / 坐标不全各有真话 |
+| M5-5 | 真实浏览器验证 | ✅ | 无头 Chrome：`canvasCount=1`、三个标记、`plaintextCodeInPage=false`、服务端日志出现 `GET /_AMapService/...`（无失败请求） |
+
+坐标纠偏的正确性**不是靠单测自证**的：用 `AMap.convertFrom(..., "gps")` 取官方值做基准，
+四个点最大偏差 2.8×10⁻⁶ 度（≈0.31 米）；官方向量已写进测试注释与断言。
+那些先写下的「广州是向东北偏」的断言在第一次运行就红了 —— 实际是**东南**（纬度变小、经度变大），
+**靠印象断言数字比不写断言更危险**。
+
+### 二、搜索 Provider：「配置说 serper，实际在跑 seed_only」
+
+| # | 问题 | 严重度 | 修法 |
+| --- | --- | --- | --- |
+| 64 | **`search_provider_effective` 能返回代码里不存在的实现**：`serper` / `bing` 的 Key 在 `.env` 与 dev 面板里都存在（预留），`auto` 下配了它们就会返回该名字，而 `registry._build_search()` 只会构造 `TavilyProvider` 或 `SeedOnlyProvider` —— 于是 `/health`、面板的生效快照、`degraded_modes` 都在说「搜索：serper」，进程实际跑的是 seed_only | 🟡 中（诚实性） | `SEARCH_KEY_FIELDS`（可配）与 `IMPLEMENTED_SEARCH_PROVIDERS`（已实现）拆成两份名单；effective 只允许返回已实现的名字；新增 `ignored_search_keys()` 与一条单独的降级提示 `search:serper(已预留、尚未实现：Key 不生效)` |
+| 65 | **同一种降级、两种原因被写成一句**：`SeedOnlyProvider` 的健康说明写死「未配置搜索 API Key」。而已实现名单之外的情况是「**配了但没实现**」——沿用原话就是在说假话 | 🟢 低（诚实性） | `SeedOnlyProvider(reason=...)`，由 registry 按 `ignored_search_keys()` 传入原因 |
+
+防漂移的做法与 R14/R12 一致：**没有断言的地方一定会漂移**。
+新增的用例对 `IMPLEMENTED_SEARCH_PROVIDERS` 里每个名字同时断言两件事 ——
+配置层说它生效、工厂层真的构造出了它（只断言其中一条的话，另一处漏掉分支照样绿）。
+
+### 三、测试隐式读了开发机的环境
+
+| # | 问题 | 严重度 | 修法 |
+| --- | --- | --- | --- |
+| 66 | **`test_config_validators.make_settings()` 挡不住已导出的环境变量**：它用 `Settings(_env_file=None, ...)`，而 `_env_file=None` 只挡住 `.env` **文件** —— pydantic-settings 总会读 `os.environ`，且环境变量优先。本机 shell 里 export 了 35 字符的 `DEEPSEEK_API_KEY` 后，「配了 OpenAI 的 Key 但 provider 指向 deepseek 应判定为未配置」立刻变红。与 #57 是同一个坑，只不过 #57 修的是 `test_providers._settings()`，这个文件没跟上 | 🟡 中 | `make_settings` 显式清空七个 Key 字段，用例的输入完全由自己决定 |
+
+同一根因的另一半写在 `RUNNING.md` §8.8：**shell 里一个空值的 `TAVILY_API_KEY=`
+会把 `.env` 里的真值遮住**（空串被归一化成 `None`，而「已设置但为空」优先于文件里的真值）。
+现象是「明明填了 Key 却还是 seed_only」，排查手法是 `printenv` + `env -u`。
+
+> 教训：**「配置没生效」与「测试环境不干净」可以是同一个原因。**
+> 遇到「本地绿、CI 红」或反之，先看环境变量，而不是先怀疑代码。
+
+### 四、Tavily 真实调用验证（B7 部分解除）
+
+新增 `tests/integration/test_search_live.py`（有 Key 则跑、无 Key 自动 skip，与 `test_llm_live.py` 同款），
+**一次运行花 2 credits**：
+
+| 检查 | 结果 |
+| --- | --- |
+| 真实搜索能拿到结果，且我们的解析层吃下真实响应（`title`/`content`/`url`/`score` 字段名未变） | ✅ |
+| `api_key` 放在请求 body 里的旧用法仍被接受（不必改成 Bearer 头） | ✅ 未报 401 |
+| `recency_days` → `days` 参数在 basic 检索下不被拒 | ✅ |
+| 响应里**没有** `credits` 字段，而记账走的是 `pricing.yaml` 的 credits 口径 | ✅ 不依赖响应字段（已核代码） |
+| 「能真实调用」与「单价已校准」被钉在一起 | ✅ `PriceBook.search("tavily", "search_basic")` 已校准且金额 > 0 |
+
+**但「配了搜索 Key」目前还不会影响方案**：规划链注册的层是 L5 / L1 / L3 / L4 / L7，
+**L8（联网搜索）不在链上**（`plan_service._build_chain`）——
+`RUNNING.md` 的降级矩阵里写的是「具备能力」，不是「已经在用」。
+**没拉搜索 ≠ 搜索没结果**，所以不把它当成已有数据填进方案里。
+
+### 本轮门槛
+
+| 项 | 结果 |
+| --- | --- |
+| 后端测试 | **999 passed**（含 3 条 Tavily 活体；不配 Key 时那 3 条如实 skip） |
+| 前端测试 | 233 → **280 passed**（新增 47：坐标 15 · 装载器 11 · 代理逻辑 6 · 代理路由 4 · 地图组件 11） |
+| 前端覆盖率 | statements **98.79%** / branches **88.43%** / functions 95.54%（闸门 96 / 84 / 89） |
+| 新增文件覆盖率 | `amap-coords.ts` / `amap.ts` / `amap-proxy.ts` 均 **100%**；`route-map.tsx` 100% / 92.3% |
+| 静态检查 | ruff 0 问题；mypy strict **118 文件** 0 错；`pnpm lint` / `typecheck` / `build` 全结 |
+| 生产产物 | 安全密钥在 `.next` 里出现 **0** 次；JS API Key 按设计出现在客户端 1 处 |
+
+### 刻意没做的事
+
+- **未把 L8 接进规划链**：接它等于让「本地库不足」时自动联网，属于策略改动（要配配额、缓存与降级路径），
+  不该顺手做；现在只是让能力真的可用，并有活体测试守着。
+- **未改 `_build_search` 支持 serper / bing**：先让「说的」与「做的」一致，再谈扩厂商。
+- **未给地图做方案对比视图、`/trip/{id}` 路由、分享页「复制这套路线」**：属 M5 剩余部分。
+- **未把三个 WebGL 地图改成共享一张**：目前最多 3 张，改动收益不划。
+
+---
+
+## 配置漂移守卫（2026-09-15）：模板 ↔ 代码 ↔ 面板
+
+> 补「配置测试」时发现的真问题：**两份 env 模板都没有人守**。
+> 它们是使用者唯一会看的配置清单（README / RUNNING 都把它当权威引用），
+> 却和代码之间没有任何约束 —— 于是往两个方向漂移。
+
+### 新增的两道守卫
+
+| # | 测试 | 守什么 | 当场抓到的漂移 |
+| --- | --- | --- | --- |
+| 67 | `backend/tests/unit/test_env_hygiene.py`（4 条） | 根 `.env.example` 的**活动键** ↔ `Settings.model_fields` ↔ 开发面板 `ENV_FIELDS`：字段必须都写进模板；模板里不许有没人读的活键；`NEXT_PUBLIC_*` 不许在根模板里是活的（Next 读不到根 `.env`） | `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` 是 `Settings` 字段、面板也能改，模板里**一个字都没有** —— 而模板自称「所有环境变量」 |
+| 68 | `frontend/lib/__tests__/env-example.test.ts`（4 条） | `frontend/.env.example` ↔ 源码里真正读 `process.env` 的地方，**两个方向都查**（读了必须写、写了必须有人读）；**允许浏览器看见的 `NEXT_PUBLIC_*` 清单钉死**；`AMAP_SECURITY_CODE` 只允许在服务端代理路由里读，任何文件都不许出现 `NEXT_PUBLIC_AMAP_SECURITY` | `API_BASE_URL`（服务端用：rewrites 目标 + SSR 绝对地址）只写在根模板里，而 Next **读不到根 `.env`** |
+
+### 结论：守卫必须自己先被验证过
+
+两条守卫都做了**反向验证** —— 把 `SEARCH_PROVIDER` 改成 `SEARCH_PROVIDR`、
+把前端模板里的 `AMAP_SECURITY_CODE` 改名，测试分别变红
+（`这些 Settings 字段在 .env.example 里一个字都没写` / `这些变量代码在读，但模板里没有`），
+改回即绿。**不会失败的测试等于没有测试**，所以这道守卫自己也留了一次"红过"的证据。
+
+### 铁律的例外被"钉住"，而不是"记着"
+
+`NEXT_PUBLIC_*` 白名单（`NEXT_PUBLIC_API_BASE_URL` / `NEXT_PUBLIC_HERO_VIDEO_URL` /
+`NEXT_PUBLIC_AMAP_JS_KEY`）写死在测试里：**新增一个就要改测试**，
+于是「再放一个 Key 进浏览器产物」必须是一次显式决定，而不是顺手加个前缀。
+
+---
+
+## 开发面板的诚实性（2026-09-15）：两把 Key 分家 · 字段提示 · 11 个空旋钮
+
+> 触发自一次真实误判：高德 JS API Key 已经配好、地图也实测渲染出来了，
+> 但看到 `/dev` 面板上「高德 Web Key（未配置）」，就得出「高德地图没配置」。
+> 顺着写提示文字的过程，又查出白名单里**有 11 个键没有任何代码读**。
+
+### 一、两把高德 Key 分家
+
+| # | 任务 | 状态 | 证据 |
+| --- | --- | --- | --- |
+| 69 | 面板新增「前端专用配置（在这里只读）」 | ✅ | 列出 `frontend/.env.local` 里那几个变量**配没配**、从哪个文件读到的（`.env.local` 优先）；后端只报存在性、**不返回值** |
+| 70 | `AMAP_WEB_KEY` / `MAP_PROVIDER` 的说明改成明确分工 | ✅ | 一个说「只有后端路由用它，另一把在 `frontend/.env.local`」，一个说「与结果页那张地图无关」；两条都有断言钉住 |
+
+**误读是怎么发生的**：面板只写仓库根的 `.env`（后端进程读它），
+而 Next **只读 `frontend/.env*`** —— 前端那两个变量在面板上从来没地方显示，
+「未配置」三个字属于**另一把 Key**。结论：**「看不见」被当成了「没配」。**
+
+前端侧解析快照时**逐字段重建**，不做对象展开：后端若多回一个 `value`，也不会被带进界面
+（测试验证：往条目里塞一把假 Key，断言它不出现在结果里）。
+
+### 二、每个字段一个圈感叹号
+
+| # | 任务 | 状态 | 说明 |
+| --- | --- | --- | --- |
+| 71 | ⓘ 悬停/聚焦/点击显示用途 | ✅ | 提示常驻 DOM（`role="tooltip"` + 控件的 `aria-describedby`）：鼠标、键盘、屏幕阅读器、Ctrl+F 都是同一段字 |
+| 72 | ⓘ **放在 `<label>` 外面** | ✅ | `<label>` 里的可交互元素会被算进控件的无障碍名字 —— 屏幕阅读器会把输入框读成「…DEEPSEEK_API_KEY 字段说明」，同一个字段也会查出两个 label（先写错的版本被现有用例拓出来了） |
+
+文字只有一个出处：后端 `ENV_FIELDS` 的 `hint`，界面不另抄一份。
+
+### 三、★ 11 个改了不会改变任何行为的旋钮 ★
+
+写提示字时被迫逐个回答「它到底影响什么」，于是发现，并**逐个处置**（这一轮做完了）：
+
+| 旋钮 | 处置 | 理由 |
+| --- | --- | --- |
+| `PLAN_` / `SEARCH_COST_CIRCUIT_BREAKER_CNY` | **移除** | 熔断器读 `limits.yaml`；而且其中一个曾经在 `/health` 上说谎（#73） |
+| `RATE_LIMIT_COLD_PLANS_PER_DAY` | **移除** | 真正的限流值在 `limits.yaml` |
+| `MAP_MAX_CALLS_PER_PLAN` | **移除** | 真正的按次数熔断在 `limits.yaml` |
+| `BACKEND_PORT` / `API_BASE_URL` | **移除** | 实际端口由 `uvicorn --port`；CORS 用 `FRONTEND_URL` |
+| `GLOBAL_DAILY_BUDGET_CNY` | **接上** | 以前没人读，现在规划链真的按它熔断（#75） |
+| `SERPER` / `BING` 的 Key、`ENABLE_LOCAL_FETCH`、`NOMINATIM_USER_AGENT` | **保留并标注** | 已规划未实现：ⓘ 写「改了不生效」，`/health` 还会点出被忽略的搜索 Key |
+
+> 移除的理由不是“嫌它们没用”，而是**它们的事务所在处本来就在别处**：
+> `config/limits.yaml`，而面板本来就能编辑它（同样先校验后落盘）。
+> 同一个数字有两个入口，早晚会漂。
+
+| # | 问题 | 严重度 | 修法 |
+| --- | --- | --- | --- |
+| 73 | **`/health` 报的熔断阈值不是真正在生效的那个**：它读 `Settings` 的镜像变量，而熔断器读 `config/limits.yaml`（`plan_service` 里 `breaker=limits.cost.circuit_breaker`）。把 `PLAN_COST_CIRCUIT_BREAKER_CNY` 改成 99，`/health` 会显示「99 元熔断」而请求仍在 **1 元**处被拦下。两边默认值恰好相等（1.0 / 0.30）才一直没被发现 | 🔴 高（诚实性：可观测界面上的谎） | `/health` 改报 `limits.yaml` 里真正生效的两个值；回归测试把环境变量改成 99，断言 health 报的仍是 limits.yaml |
+| 74 | **面板上能改、但没人读的键没有任何标记**：以前只盯「Secret 会不会泄到浏览器」，没人问过「改了到底有没有用」 | 🟡 中（诚实性） | `INEFFECTIVE_ENV_KEYS` 显式登记；三道测试卡住（见下），另加一条锁住“镜像键不许回到面板” |
+| 75 | **全局日成本是一句空话**：`limits.yaml` 写着 `cost.global_daily_cny: 20.00`（PRD §15.4 第四级熔断：超限 ⇒ 进缓存优先模式），但**没有任何代码读它**。`CostLedger` 的熔断器一次规划一份，只看本次 | 🟡 中（成本兜底缺失） | `CostStore.daily_budget()` 按 UTC 日历日聚合；判定放在**建链之前**（链一跑钱就花了）；超限时不调模型、只走本地与缓存；降级理由带上“花了多少/上限多少”；`/health` 新增 `cost` 区块；`limit <= 0` = 不限制；边界取“到线即用完” |
+
+> 方法上的老规矩再验证一次：四条新守卫都做了**变异验证** ——
+> 把 `/health` 改回镜像变量、从声明表里拿掉 `BACKEND_PORT`、删掉某句提示、
+> 关掉规划链里那行预算判定，四种情况下对应用例都真的变红。
+
+**关于“查不到”的边界**：库读不出来时 `/health` 报的 `budget_exceeded` 是 **`null` 而不是 `false`**。
+报 `false` 等于向运维保证“还没超预算”，而那是一句没有根据的话 —— 同「null ≠ 0」。
+有一条用例专门用会抛错的 `CostStore` 钉子这个行为。
+
+### 本轮门槛
+
+| 项 | 结果 |
+| --- | --- |
+| 后端测试 | 1013 → **1021 passed**（+8：日预算纯函数 3 · 日均聚合 1 · `/health` 成本区块 2 · 规划链阀门 1 · 镜像键不许回归面板 1；含 3 条 Tavily 活体，不配 Key 时如实 skip） |
+| 前端测试 | 284 → **292 passed**（新增 8：`dev-settings` 5 · `dev-api` 3） |
+| 前端覆盖率 | statements **98.86%** / branches **88.95%** / functions 95.67%（闸门 96 / 84 / 89） |
+| 静态检查 | ruff 0 问题；mypy strict 119 文件 0 错；`pnpm lint` / `typecheck` / `test` 全绿 |
+| 真实运行 | 起前后端 + 无头 Chrome 打 `/dev`：字段的 ⓘ 与 tooltip 一一对应（说明全部常驻 DOM）、「前端专用配置」栏里 `NEXT_PUBLIC_AMAP_JS_KEY = 已配置 · frontend/.env.local`、页面与接口响应里都没有明文 Key；`/health` 报的 `cost_breakers` 与 `limits.yaml` 逐字符一致（1.0 / 0.3） |
 
 ---
 

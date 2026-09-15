@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import uuid
+from collections.abc import Callable
 from typing import Any, cast
 
 import pytest
@@ -26,7 +27,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.core.config import get_settings
+from app.core.config import get_limits_config, get_settings
 from app.db.models import RateLimitCounter
 from app.services.session import encode_session_cookie
 
@@ -52,6 +53,9 @@ def _clear_rate_limits() -> None:
 @pytest.fixture(autouse=True)
 def _fresh_rate_limits() -> None:
     _clear_rate_limits()
+
+
+
 
 
 _counter = itertools.count(1000)
@@ -164,6 +168,29 @@ def test_sync_plan_is_honest_about_estimates(client: TestClient) -> None:
     assert first["budget_estimated"] is True
     sources = {stop["transport_source"] for stop in first["stops"] if stop["transport_source"]}
     assert sources <= {"amap", "osrm", "estimated", "manual"}
+
+
+def test_global_daily_budget_switches_plans_to_local_only(
+    client: TestClient, cost_row_factory: Callable[[str], int]
+) -> None:
+    """★ PRD §15.4 第四级熔断：全局日成本超限 ⇒ 进「缓存优先模式」，不再调模型/联网。
+
+    这一级以前**没有任何代码读它**：`config/limits.yaml` 里写着 20 元，
+    但没人比对 —— 一个拦不住支出的阈值比没有更危险，看到它在那里就会以为有兜底。
+    而“单次规划”的熔断器只看本次，看不住一天里很多次堆起来的账单。
+
+    这里连降级原因一起断言：钱花完了才降级，与“本来就没配 Key”是两件事，
+    不说清楚就只能靠猜。
+    """
+    limit = get_limits_config().cost.global_daily_cny
+    cost_row_factory(str(float(limit) + 5))
+    trip = _plan_sync(client)
+
+    reasons = [mode for mode in trip["degraded_modes"] if mode.startswith("cost:global_daily_budget")]
+    assert reasons, f"已超预算却没有报告：{trip['degraded_modes']}"
+    # 金额与上限都要写出来：“超预算了”没用，“花了 25/20”才有用
+    assert str(round(float(limit) + 5, 4)) in reasons[0]
+    assert f"{limit:.2f}" in reasons[0]
 
 
 def test_revise_applies_intent_only_instruction(client: TestClient) -> None:

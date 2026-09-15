@@ -12,6 +12,12 @@
 > **2026-09-14 追加实跑**：`make cost`（首次跑通，产物 `docs/COST_REPORT.md`）、`make check`（exit=0）、
 > `git push` 三条分支（见 §11）、**GitHub Actions 首跑通过**（4.2 分钟，见 §12）。
 >
+> **2026-09-14 追加实跑（M5 起步）**：用无头 Chrome 真跑了一遍「首页默认值 → 点开始规划 → 看到 A/B/C 三套方案与站点明细 → 改路线（改成 2 天）→ 撤销 → 生成公开链接 → 打开分享页」，
+> 并因此定位并修好两个真实缺陷：跨站页面下游客会话 cookie 被浏览器丢弃（§8.6）、
+> `plan.completed` 只有元信息而界面从不回查行程（§5.4 已更新）。
+> 还顺手修了一个只有真跑才会暴露的 HTML 问题：结果区里的「改路线」表单一度嵌在规划表单内（`form` 套 `form`，浏览器报 hydration 错误）。
+> 前端闸门实测：`pnpm test --run` 233 passed / typecheck / lint 全绿。
+>
 > **未实测**（文中数字来自 `README.md`/`Makefile`）：`make setup`（会装依赖，没有重跑）、
 > `make fetch-osm`（需网络，约 9 分钟）、
 > `make relations` / `make todo` / `make security`。
@@ -190,13 +196,15 @@ make db-drop CONFIRM=yes
 ## 5. 现在能用什么（截至 2026-09-13）
 
 进度：**M0 脚手架 + M1 广州知识库 + M2 领域内核 + M3 Provider + M4 规划编排与 API 已完成；
-M5 前端结果页未开始**（以 `TASKS.md` 为准；`README.md` 表格里的 M4「进行中」是过期描述）。
+M5 前端结果页进行中**（首页提交 → 三套方案时间线 → 改路线 / 撤销 / 分享 / 地图已可用；
+地图需配 `NEXT_PUBLIC_AMAP_JS_KEY`，见 §8.7；还剩方案对比视图与结果页自己的 URL）。
 
 ### 5.1 可以打开的前端页面
 
 | 页面 | 地址 | 内容 |
 | --- | --- | --- |
-| 首页 | http://localhost:3000 | 后端连接状态与知识库规模（真实数据，连不上会明说而不是显示假数据）、规划表单 |
+| 首页 | http://localhost:3000 | 后端连接状态与知识库规模（真实数据，连不上会明说而不是显示假数据）、规划表单；提交后在同一页看到 A/B/C 三套方案与站点明细（含站点位置示意图），并可改路线 / 撤销 / 分享 |
+| 分享页 | http://localhost:3000/t/{slug} | 公开链接的落地页（读公开接口 + 服务端渲染，无需登录、只读）；取消分享后**立刻 404**（后端层） |
 | 知识库浏览 | http://localhost:3000/explore/guangzhou | 概况条、类别筛选、**别名搜索**（「小蛮腰」→ 广州塔）、地点卡片、44 条路线模板 |
 | 数据来源与免责 | http://localhost:3000/about/data | 每类数据从哪来、哪些不保证 |
 | **开发设置**（不是用户功能） | http://localhost:3000/dev | 只在开发构建可见；见 §5.5 |
@@ -330,9 +338,18 @@ meta.llm = {
 
 | 区域 | 能改什么 | 注意事项 |
 | --- | --- | --- |
-| 环境变量 | LLM Provider / 各家 Key / 模型名 / 超时重试 · 搜索与地图 Provider 与 Key · 成本与限流阈值 · 端口与 CORS | **Secret 只写不读**（只显示 `sk-***abcd`）；**留空 = 不修改**；要清空得点那一行的「清空该项」 |
+| 环境变量 | LLM Provider / 各家 Key / 模型名 / 超时重试 · 搜索与地图 Provider 与 Key · 成本与限流阈值 · 端口与 CORS | **Secret 只写不读**（只显示 `sk-***abcd`）；**留空 = 不修改**；要清空得点那一行的「清空该项」；每个字段右侧的 **ⓘ** 悬停/点击就是它的用途说明 |
 | 配置文件 | `config/*.yaml` 五份（scoring / limits / ttl / pricing / seed）全文编辑 | **先校验后落盘**：不通过就一个字节都不写（提示里会带 `hint`） |
+| 前端专用配置 | 只读：`frontend/.env.local` 里那几个变量当前配没配、从哪个文件读到的 | 面板**改不到**它们（Next 只读 `frontend/.env*`），但必须看得见 —— 否则「高德 Web 服务 Key 未配置」会被读成「地图整体没配」（§8.9） |
 | 生效快照 | 只读展示当前进程真正在按什么跑（provider 降级、阈值、版本号、`degraded_modes`） | 改完这里没变 → 说明改动没生效，而不是"面板在骗你" |
+
+> ⚠️ **成本与限流阈值不在这张表里**：它们的事务所在处是 `config/limits.yaml`
+> （下一张卡片可直接改，同样是先校验后落盘）。`.env` 里的同名变量只是镜像，
+> 摆在面板上只会让人改一个不生效的数 —— 2026-09-15 已从白名单移除（§8.9）。
+>
+> 剩下 4 个键是**已规划但尚未实现**的开关（Serper / Bing 的 Key、
+> `ENABLE_LOCAL_FETCH`、`NOMINATIM_USER_AGENT`）：它们的 ⓘ 里写着「改了不生效」，
+> 两个方向都有测试钉住。
 
 改完会**清空配置缓存并把值写进 `os.environ`**，所以大多数改动不用重启；
 `.env` 里的值会保留（只改对应行，注释与顺序都不动），下次启动仍然生效。
@@ -344,14 +361,16 @@ meta.llm = {
 
 | 还不能 | 原因 |
 | --- | --- |
-| 在网页上看到路线方案 | M5 结果页未实现（后端已能返回数据） |
-| 把方案拿去做验证 | 后端已可用（`/api/v1/trips:plan`）；结果页属 M5 |
-| 地图展示、路线分享页（前端） | M5 |
+| 方案对比视图 | 三套方案是并列卡片，没有交叉对比；另外结果页用的是**站点位置示意图**（编号标记 + 按顺序连线），不是可交互的路线导航图 |
+| 结果页的独立 URL | 行程目前只在首页表单下方渲染（没有 `/trip/{id}` 路由，刷新会回到空白表单）；分享走的是另一条路（`/t/{slug}`） |
+| 分享页的「复制这套路线」 | 后端 `POST /public/trips/{slug}/copy` 已可用（会生成一份属于访客的可编辑副本），但前端还没有落脚点（没有 `/trip/{id}` 路由） |
+| 分享页的 OG 图 / JSON-LD | PRD §21 提到，未实现（当前只有标题与描述） |
 | `make e2e` | `frontend/` 下**没有** Playwright 依赖与配置（已确认目录里没有 `e2e/`、没有 playwright 配置），该目标会直接失败 |
 
-> 另：首页表单那个稳定 422 已于 2026-09-13 修好（§5.2），
-> 所以「点提交 → 看进度 → 看这次模型做了什么」现在是通的；
-> 不做的只是「把方案渲染成时段表/地图」那一段（M5）。
+> 首页那条「稳定 422」已于 2026-09-13 修好（§5.2），会话 cookie 被丢弃的问题已于 2026-09-14 修好（§8.6），
+> 所以「点提交 → 看进度 → 看这次模型做了什么 → 看到方案本身 → 改一改 / 撤销 / 分享出去」现在是**通的**；
+> 地图（§8.7）也已接上，但需要配置 JS API Key。
+> 没做的是方案对比视图、结果页自己的 URL（`/trip/{id}`）与分享页的「复制这套路线」。
 
 ---
 
@@ -415,7 +434,30 @@ make format     # 自动格式化
 - **唯一的环境文件是项目根目录的 `.env`**（后端通过 `backend/app/core/paths.py` 的 `env_file()` 读它）。
 - ⚠️ **Next.js 只读 `frontend/` 目录下的 `.env*`**（如 `frontend/.env.local`）。
   把前端变量写在根 `.env` 里**不会被前端进程读到**。
+- ⚠️★ **已导出的环境变量会盖住 `.env`** ★：pydantic-settings 的优先级是
+  「环境变量 > `.env` 文件」，而且**空值也算"已经设置"**（空串会被归一化成 `None`）。
+  实测：shell 里 `export TAVILY_API_KEY=`（空）时，往 `.env` 里填好 Key 也读不到，
+  `search_provider_effective` 仍然是 `seed_only`。
+  排查手法：`printenv TAVILY_API_KEY` 看有没有被导出；临时验证用 `env -u TAVILY_API_KEY ...`。
+  详见 §8.8（这也是那个「测试偷读开发机环境」问题的另一半）。
+- **前端默认走同源代理**：浏览器只请求 `localhost:3000/api/*`，由 `frontend/next.config.ts` 的
+  `rewrites` 转发到后端（目标地址取 `API_BASE_URL`，默认 `http://127.0.0.1:8000`）。
+  这是**必需**的，不是省一次 CORS：页面 `localhost:3000` 与后端 `127.0.0.1:8000` 属于跨站，
+  后端签发的 `td_session` 会被浏览器当成**第三方 cookie 直接丢掉**，
+  于是每个请求都是新会话、`GET /trips/{id}` 永远 403（详见 §8.6）。
+  确实要直连别的后端时可在 `frontend/.env.local` 里设 `NEXT_PUBLIC_API_BASE_URL`，
+  但那样会话能不能用取决于浏览器的第三方 cookie 策略。
 - 铁律：任何 Key 只存在于后端环境变量，禁止进入前端产物。
+  **唯一已知例外**：高德地图的 JS API Key（`frontend/.env.local` 的 `NEXT_PUBLIC_AMAP_JS_KEY`）。
+  它必须出现在浏览器加载的 `<script src="https://webapi.amap.com/maps?...&key=...">` 里 ——
+  这是 JS API 的固有形态，绕不过去；保护手段是高德控制台的**域名白名单**。
+  与之配套的安全密钥**不在此例外内**：它走服务端代理（`AMAP_SECURITY_CODE`，不加 `NEXT_PUBLIC_` 前缀），
+  详见 §8.7。前端环境变量的完整清单见 `frontend/.env.example`。
+- 两份模板都有**漂移守卫单测**（`make check` 会跑）：
+  根 `.env.example` ↔ `Settings` ↔ 开发面板白名单（`tests/unit/test_env_hygiene.py`）；
+  `frontend/.env.example` ↔ 源码里真正读 `process.env` 的那几处（`lib/__tests__/env-example.test.ts`）。
+  于是「加了变量忘写模板」「模板里拼错了键名」「留了个没人读的开关」都会当场变红；
+  允许被浏览器看见的 `NEXT_PUBLIC_*` 清单也写死在那条测试里 —— 新增一个必须是有意识的决定。
 
 关键变量（完整清单见 `.env.example`）：
 
@@ -437,7 +479,7 @@ make format     # 自动格式化
 | 供应商 | 状态 |
 | --- | --- |
 | `llm.deepseek`（fast/strong） | ✅ 已从官方价目页回填（`calibrated_at: 2026-09-13`，按**高峰价**填，低峰为半价） |
-| `search.tavily` | ✅ 已回填 credits 口径 |
+| `search.tavily` | ✅ 已回填 credits 口径，且 2026-09-14 真实调用验证过（`test_search_live.py`：单独跑花 2 credits） |
 | `search.seed_only` / `map.osrm` / `map.haversine` / `weather` | ✅ 免费，金额 0 且 `calibrated=true`（0 元是已知事实） |
 | `map.amap` / `search.serper` / `search.bing` / `llm.openai` / `llm.anthropic` | ❌ 仍为 `null` + `needs_calibration: true`：金额记 0 且标记未校准，**不是"免费"** |
 
@@ -450,7 +492,7 @@ make format     # 自动格式化
 | 能力 | 有 Key | 无 Key 降级 |
 | --- | --- | --- |
 | LLM（DeepSeek） | 意图补全（规则没解析到的自由文本）+ 方案叙事（路线名/推荐理由） | 规则引擎 + 模板文案 |
-| 搜索 | 发现库外新地点 | `seed_only`：只读本地知识库 |
+| 搜索（Tavily） | 具备联网检索能力（已真实调用验证，见 §8.7 旁的 `test_search_live.py`） | `seed_only`：只读本地知识库 |
 | 地图（高德） | 精确路网与公交时间 | `OSRM` 真实路网 → `haversine` 离线估算 |
 | 天气（open-meteo，免 Key） | 雨天/高温路线适配 | 跳过天气适配 |
 
@@ -493,11 +535,209 @@ make format     # 自动格式化
 `frontend/` 下没有 Playwright 依赖、没有配置文件、也没有 `e2e/` 目录（已确认），
 端到端测试属于尚未开始的里程碑。
 
-### 8.5 文档口径不一致
+### 8.6 ✅ 已修复：跨站页面下会话 cookie 被浏览器丢弃（点「开始规划」看不到任何路线）
 
-`README.md` 的状态表仍写着 M4「进行中」、并描述首页提交会「打印真实 JSON 请求体」；
+**症状**（2026-09-14 用无头 Chrome 实测）：点「开始规划」后界面只显示
+「后端已接受这次规划请求 / 已生成 3 套方案」，**一条路线都没有**；同一次点击里，
+`GET /api/v1/trips/{trip_id}` 返回 **403 `FORBIDDEN`「这个行程不属于当前会话」**。
+
+**根因**（两个叠在一起）：
+
+1. **接口从不返回路线内容**。`plan.completed` 事件只带元信息
+   （`trip_id` / `route_count` / `cached` / `degraded_modes` / `llm`），
+   路线与站点只能从 `GET /api/v1/trips/{id}` 读 —— 而前端当时根本没调它（结果页属 M5）。
+2. **就算调了也一定 403**：页面在 `localhost:3000`、后端在 `127.0.0.1:8000`，两者**跨站**，
+   后端签发的 `td_session` 是**第三方 cookie**。
+   - `lib/api.ts` 的 `fetch` 没带 `credentials`（默认 `same-origin`）→ 跨域响应上的
+     `Set-Cookie` 不发送也不保存；
+   - 补上 `credentials: "include"` 之后依然不行：Chrome 现在的默认策略**直接丢弃第三方 cookie**
+     （实测 `Network.getAllCookies` 为空，而把页面换成 `http://127.0.0.1:3000` 就能存下 `td_session` 并拿到 200）。
+   另外 `lib/plan-stream.ts` 的 SSE 一直用的是 `withCredentials: true`，
+   两条通道凭证不一致，等于把同一次「开始规划」拆成了两个互不相识的会话。
+
+**修法**：
+
+- 浏览器改走**同源**：`frontend/next.config.ts` 增加 `rewrites`（`/api/:path*` → 后端），
+  `lib/api.ts` 的 `API_BASE_URL` 默认空串；`NEXT_PUBLIC_API_BASE_URL` 不再内联进产物。
+  于是 cookie 是第一方的，顺带整个 CORS 都不再需要（后端白名单保留，直连场景仍可用）。
+- `fetch` 显式 `credentials: "include"`（`REQUEST_CREDENTIALS`），与 SSE 的 `withCredentials` 对齐。
+- 前端补上「回查行程」这一步：新增 `components/trip-result.tsx`，
+  收到 `plan.completed` 后 `GET /trips/{trip_id}` 并把 3 套方案渲染成带时间线的卡片，
+  同时把估算值、未知项、校验提醒如实标出。
+
+**防回归**：`lib/__tests__/api.test.ts` 钉住 `API_BASE_URL === ""` 与 `credentials: "include"`；
+`components/__tests__/trip-result.test.tsx` 钉住加载/失败/重试/空路线四条路径与诚实性标注；
+`planner-llm-status.test.tsx` 钉住「完成后真的去取行程并渲染」。
+
+**实测（修复后，无头 Chrome）**：`localhost:3000` 上点「开始规划」→
+`202` → SSE `plan.completed` → `GET /api/v1/trips/{id}` **200** → 页面出现「方案 A/B/C」的站点时间线；
+`Network.getAllCookies` = `["td_session"]`。
+
+### 8.5 ✅ 已修复：文档口径不一致
+
+`README.md` 的状态表曾写着 M4「进行中」、并描述首页提交会「打印真实 JSON 请求体」；
 `TASKS.md`（最后更新 2026-09-12）已记录 M4 完成、提交会真实调用 `POST /trips:plan`。
-以 `TASKS.md` 和实际代码为准。
+现已对齐：`README.md` 的里程碑表与「当前不能做什么」都按实际能力重写，
+本文件 §5 那两句「M5 前端结果页未开始」也已改成实情。
+
+剩下的一处不一致：`TASKS.md` 还没有 M5 小节（M4 之后直接跳到「下一步（M5 起）」）。
+
+### 8.7 高德地图接入（2026-09-14）
+
+结果页的每套方案里多了一张站点位置示意图。三件值得记下来的事：
+
+**一、Key 的类型是实测出来的，不是猜的。**
+高德的「Web端(JS API)」与「Web服务」是两类 Key，用错会返回 `USERKEY_PLAT_NOMATCH (10009)`。
+实测拿到的那把 Key：
+
+```
+GET https://restapi.amap.com/v3/geocode/geo?key=...   → 10009 USERKEY_PLAT_NOMATCH
+GET https://restapi.amap.com/v3/ip?key=...            → 10009 USERKEY_PLAT_NOMATCH
+```
+
+即它是 **JS API 类型**：只能给前端地图用，**不能**填到根 `.env` 的 `AMAP_WEB_KEY`
+（那个要走 Web服务，用于后端路径规划）。所以后端的 `map_provider_effective` 目前仍是 `osrm`。
+
+**二、坐标必须纠偏，否则每个点偏 100–700 米。**
+库里的坐标全部来自 OSM，是 **WGS-84**；高德瓦片是 **GCJ-02**。
+实现放在 `frontend/lib/amap-coords.ts`（纯函数），并**拿官方值当过基准**：
+用 `AMap.convertFrom(lnglat, "gps", cb)` 对四个点求值再比对 ——
+最大偏差 2.8×10⁻⁶ 度（≈0.31 米），而高德返回的坐标本身只保留 6 位小数（≈0.11 米），
+所以这点差异基本全来自它自己的取整。实测向量已写进 `lib/__tests__/amap-coords.test.ts`。
+
+**三、安全密钥不进前端产物（Key 则是绕不过去的例外）。**
+
+| 变量 | 位置 | 会不会进浏览器 |
+| --- | --- | --- |
+| `NEXT_PUBLIC_AMAP_JS_KEY` | `frontend/.env.local` | **会**（脚本 URL 里，JS API 的固有形态；保护靠控制台域名白名单） |
+| `AMAP_SECURITY_CODE` | `frontend/.env.local`（**不加** `NEXT_PUBLIC_`） | 不会：由 `app/amap-proxy` 转发时补 `jscode` |
+
+接线：`lib/amap.ts` 在插脚本**之前**设 `window._AMapSecurityConfig = { serviceHost: "<origin>/_AMapService" }`
+（顺序错了设置无效，官方文档写明），`next.config.ts` 把 `/_AMapService/*` 转到
+`app/amap-proxy/[...path]/route.ts`，由它补上密钥后转发给高德。
+
+**实测（无头 Chrome，真实链路）**：
+
+| 检查 | 结果 |
+| --- | --- |
+| 页面里是否有明文安全密钥 | `plaintextCodeInPage: false` |
+| SDK 是否走了同源代理 | 服务端日志出现 `GET /_AMapService/v3/log/init?...`（无失败请求） |
+| 地图是否真的画出来 | `<canvas class="amap-layer">` + 三个标记（`title="广州塔/海心沙/陈家祠"`，编号 1/2/3） |
+| 客户端自带 `jscode=ATTACKER` | 被服务端**覆盖**：`sec_code` 与「用真密钥直连高德」逐字符相同 |
+| 非 GET 方法 | 405 |
+| 缺 `AMAP_SECURITY_CODE` | 503，并说清去哪儿配 |
+
+**代价与已知取舍（如实记录）**：
+
+- **站点连线是直线**：我们只有站点坐标，没有路段几何。图注写明了「虚线只表示先后顺序，不是实际行车路线」——
+  要画真路线得上高德 Web服务（需要另一把 Key）；
+- **每套方案各一张地图**（最多 3 张），每张占一个 WebGL 上下文；再多就得改成共享一张大地图 + 切换；
+- **高德 JS SDK 是外部脚本**：页面会请求 `webapi.amap.com`。没配 Key 时**不加载任何外部脚本**，
+  位置改成一句「未配置地图 Key」；加载失败/WebGL 不可用也各有对应的一句话，站点列表始终不受影响；
+- **安全密钥走同源代理，意味着前端进程必须由 Next 伺服**（与 §8.6 的同源代理同一个约束）。
+
+### 8.8 ★ 已解释：`.env` 里填好的 Key 不生效（被 shell 里的空值遮蔽）
+
+**症状**：在 `.env` 里把 `TAVILY_API_KEY` 填好，`search_provider_effective` 却仍是 `seed_only`，
+`test_search_live.py` 三条全 skip。
+
+**根因**：pydantic-settings 读配置的优先级是「**环境变量 > `.env` 文件**」。
+开发机的 shell 里已经 export 了一个**空**的 `TAVILY_API_KEY`，
+而空串会被 `Settings._blank_to_none` 归一化成 `None` —— 于是「已设置但为空」
+比「`.env` 里有真值」优先，真值永远进不来。
+
+```
+$ printenv TAVILY_API_KEY        # → 已导出（0 字符）
+$ cd backend && python -c "..."
+tavily_api_key            -> None          # .env 里明明填了
+$ env -u TAVILY_API_KEY python -c "..."    # 去掉这个空值后
+tavily_api_key            -> 已读到，长度 58
+search_provider_effective -> tavily
+```
+
+**这不是代码 bug，是标准（且合理）的优先级规则**：12-factor 的用意就是让运行环境能覆盖
+配置文件（容器/CI 都靠它）。所以修法在环境侧，不在代码侧：
+
+- 确认 shell 里没有多余的 `export XXX_API_KEY=`（`printenv XXX` 为空却是「已设置」时最难发现）；
+- 临时验证用 `env -u XXX_API_KEY make ...` 或新开一个 shell。
+
+同一个机制反过来造成了 `make_settings()` 那条测试问题（测试「无 Key 时应降级」却读到了
+shell 里的 `DEEPSEEK_API_KEY`，见 TASKS.md 本节）。两处合起来的结论：
+**「配置没生效」与「测试环境不干净」可以有同一个原因。**
+
+### 8.9 ★ 一次真实的误判：面板上「未配置」不等于「整条能力没配」（2026-09-15）
+
+**症状**：高德 JS API Key 明明已经配好、地图也实测渲染出来了，
+但在 `/dev` 面板上看到「高德 Web Key（未配置）」，于是断定「高德地图没配置」。
+
+**根因**：那是个**同名不同物**的误读 —— 高德要两把不同平台的 Key：
+
+| Key | 位置 | 干什么 |
+| --- | --- | --- |
+| `NEXT_PUBLIC_AMAP_JS_KEY` + `AMAP_SECURITY_CODE` | `frontend/.env.local` | **结果页那张地图**（Web端 JS API） |
+| `AMAP_WEB_KEY` | 仓库根 `.env` | **后端路径规划**（Web服务），目前仍是空的，后端走 OSRM |
+
+面板只写仓库根的 `.env`（后端进程读它），而 Next **只读 `frontend/.env*`** ——
+所以前端那两个变量在面板上从来就没地方显示，「未配置」三个字属于另一把 Key。
+这直接导致了一个错误结论：**「看不见」被当成了「没配」。**
+
+**修法（三层）**：
+
+1. 面板新增一栏**「前端专用配置（在这里只读）」**：列出 `frontend/.env.local` 里那几个变量
+   现在**配没配**、**从哪个文件读到的**（`.env.local` 优先），
+   并写明「本面板改不到它们」。后端只报存在性、**不返回值**，与 Secret 的只写不读同一条纪律；
+   前端解析时逐字段重建，就算后端多回一个 `value` 也不会被带进界面。
+2. `AMAP_WEB_KEY` / `MAP_PROVIDER` 的说明改成明确分工：一个说「只有后端路由用它，
+   另一把在 `frontend/.env.local`，见下方那一栏」，一个说「只决定后端算距离走谁，
+   与结果页那张地图无关」。两条都有测试钉住。
+3. 每个字段右侧加了 **ⓘ 圈感叹号**：悬停/键盘聚焦/点击都能看到「这个字段是干什么的」。
+   提示文字**常驻 DOM**（`role="tooltip"` + 控件的 `aria-describedby`），
+   所以鼠标、键盘、屏幕阅读器、Ctrl+F 拿到的都是同一段字，且只有一个出处（后端的 `hint`）。
+   圈感叹号**刻意放在 `<label>` 外面**：`<label>` 里的可交互元素会被算进控件的无障碍名字，
+   屏幕阅读器会把输入框读成「…DEEPSEEK_API_KEY 字段说明」。
+
+**顺着这件事查出来的更大的问题：白名单里有 11 个键改了不会改变任何行为。**
+
+写提示字的过程里被迫逐个回答「那它到底影响什么」，于是发现：
+
+| 旋钮 | 它本该干什么 | 处置 |
+| --- | --- | --- |
+| `PLAN_` / `SEARCH_COST_CIRCUIT_BREAKER_CNY` | 熔断阈值 | **移除**（归属 `limits.yaml`）；其中一个曾经在 `/health` 上说谎，已单独修掉 |
+| `RATE_LIMIT_COLD_PLANS_PER_DAY` | 每会话每日冷规划上限 | **移除**（归属 `limits.yaml`） |
+| `MAP_MAX_CALLS_PER_PLAN` | 按次数的地图熔断 | **移除**（归属 `limits.yaml`） |
+| `GLOBAL_DAILY_BUDGET_CNY` | 全局日成本上限 | **接上**：以前没人读，现在规划链真的按它熔断（见下） |
+| `BACKEND_PORT` | 后端端口 | **移除**：实际端口由 `uvicorn --port` 决定 |
+| `API_BASE_URL` | — | **移除**：CORS 用的是 `FRONTEND_URL`，这个键没人读 |
+| `SERPER_API_KEY` / `BING_SEARCH_API_KEY` / `ENABLE_LOCAL_FETCH` / `NOMINATIM_USER_AGENT` | 已规划、尚未实现 | **保留并标注**：ⓘ 里写「改了不生效」，`/health` 还会点出被忽略的搜索 Key |
+
+**那个会说谎的旋钮**（最严重的一条，已修）：`/health` 从前报的是熔断阈值的**环境镜像**，
+而熔断器读的是 `config/limits.yaml`。把它改成 99，`/health` 就会高高兴兴地显示
+「99 元熔断」，而请求仍然在 **1 元**处被拦下 —— 两边默认值恰好相等（1.0 / 0.30）才一直没人发现。
+现在 `/health` 只报 `limits.yaml` 里真正生效的两个数，并配了回归测试
+（把环境变量改成 99，断言 health 报的仍是 limits.yaml）。
+
+**接上的是全局日成本**（PRD §15.4 第四级熔断：「全局日成本 > 配置上限 ⇒ 全站进入缓存优先模式」）：
+
+- 判定在**建链之前**：链一旦跑起来钱就已经花了；超限时不调模型（`trace.enabled = False`），
+  只走本地知识库与缓存；
+- 降级理由带上**两个数**：「今日已花 20.43 元，上限 20.00 元」——
+  “超预算了”没用，“花了多少/上限多少”才有用；
+- `/health` 新增 `cost` 区块：今天的累计支出、上限、是否超限；
+  **库读不出来时 `budget_exceeded` 是 `null` 而不是 `false`**（查不到 ≠ 没超，同「null ≠ 0」）；
+- `limit <= 0` 视为不设上限（与 `rate_limit` 同一口径）；
+- 边界取「到线即算用完」（`>=` 而不是 `>`）：预算是“最多花这么多”，写成 `>` 等于每天都多送一份额度。
+
+为什么这一级不能靠 `CostLedger` 的熔断器代劳：那个账本**一次规划一份**，只看得住一次；
+真正的账单失控是“一天里很多次”堆起来的。
+
+**防复发**：`INEFFECTIVE_ENV_KEYS` 把这类键显式登记，三道测试卡住：
+①声明与实际必须完全一致（扫源码找消费方，多一个少一个都红）；
+②声明了的键**必须在提示里写明「改了不生效」**；③每个字段都必须有说明。
+另加一条锁住“镜像键不许回到面板”的测试。四条都做了变异验证
+（把 `/health` 改回镜像、拿掉某个声明、删掉某句提示、关掉规划链那一行，确认对应用例真的变红）。
+
+**另附一个小工具**：`app/core/paths.py` 新增 `frontend_dir()`（定位项目根下的 `frontend/`），
+面板读前端环境变量时用它，不再各自拼路径。
 
 ---
 
@@ -510,8 +750,13 @@ make format     # 自动格式化
 | `make db-up` 报 compose 文件找不到 | 仓库无 `docker-compose.yml`，改用 `brew services start postgresql@16` |
 | 首页点「开始规划」报 404/NOT_FOUND | 后端未启动或端口/地址不对（M4 已完成，这个接口是存在的） |
 | 首页点「开始规划」报 422 `INVALID_INPUT` | 后端认为输入不合法：看 `hint` 里的合法取值。表单正常情况下不会触发它 |
+| 点「开始规划」显示「已生成 N 套方案」但看不到路线 / 取回行程报 403 `FORBIDDEN` | 会话对不上：确认前端请求的是**同源** `/api/*`（由 Next 代理转发，见 §8.6），而不是直连 `127.0.0.1:8000`。清掉 `td_session` cookie 会换成一个新游客会话（旧行程按会话隔离，读不回来） |
 | 想反馈后端错误 | 每个响应都带 `X-Request-Id`（响应体 `meta.request_id`），带上它去查后端日志 |
 | 后端日志出现「降级模式生效」warning | 正常，说明缺 Key；填 Key 后重启即可 |
+| `/dev` 面板显示「高德 Web Key（未配置）」 | **不代表地图没配**：那是后端路由用的「Web服务」Key；结果页那张地图用的是 `frontend/.env.local` 里的「Web端(JS API)」Key —— 看面板下方「前端专用配置（在这里只读）」那一栏（§8.9） |
+| 面板上某个旋钮改了却什么也没发生 | 先看它 ⓘ 里有没有「改了不生效」；成本/限流阈值不在这张表里，它们在 `config/limits.yaml`（§8.9） |
+| 想改熔断阈值 / 限流 / 日预算 | 改 `config/limits.yaml`（面板下一张卡片可直改，先校验后落盘）；`.env` 里那些同名变量没用（§8.9） |
+| `/health` 里 `cost.budget_exceeded` 是 `null` | 库读不出来，**不等于没超预算**（§8.9） |
 | `make validate` / `make seed` 报 `No module named 'app'` | 2026-09-13 已在 Makefile 里修好（§8.1）；若仍报错，说明你的 Makefile 是旧版 |
 | `make validate` 非零退出 | 这是**刻意的发布闸门**，按输出里的阻断项修数据 |
 

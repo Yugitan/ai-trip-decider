@@ -15,7 +15,14 @@ from pydantic import ValidationError
 
 from app.core.config import CircuitBreakerLimits, PricingConfig, get_limits_config, get_pricing_config
 from app.core.errors import CostBreakerOpen
-from app.services.cost import CostLedger, PriceBook, _decimal, _node
+from app.services.cost import (
+    CostLedger,
+    DailyBudget,
+    PriceBook,
+    _decimal,
+    _node,
+    compare_daily_budget,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -385,3 +392,42 @@ def test_ledger_summary_shape() -> None:
 def test_circuit_breaker_limits_require_all_fields() -> None:
     with pytest.raises(ValidationError):
         CircuitBreakerLimits(plan_total_cny=1.0)  # type: ignore[call-arg]
+
+
+# ── 全局日成本（PRD §15.4 第四级熔断）─────────────────────────────────────
+
+
+def test_daily_budget_boundary_and_off_switch() -> None:
+    """到线即算用完：预算是「最多花这么多」，不是「直到超过为止」。
+
+    边界写错（用 `>` 而不是 `>=`）等于每天都多花一份额度，而且永远只在
+    「刚好花完」那一天才看得出来 —— 这种错误不会被日常使用发现。
+    """
+    assert compare_daily_budget(Decimal("0"), 20.0) is False
+    assert compare_daily_budget(Decimal("19.999999"), 20.0) is False
+    assert compare_daily_budget(Decimal("20"), 20.0) is True
+    assert compare_daily_budget(Decimal("200"), 20.0) is True
+    # limit <= 0 视为不设上限（与 rate_limit 的 `limit <= 0` 同一口径）
+    assert compare_daily_budget(Decimal("9999"), 0) is False
+    assert compare_daily_budget(Decimal("9999"), -1) is False
+
+
+def test_daily_budget_reason_carries_both_numbers() -> None:
+    """降级理由必须自带金额与上限：“超预算了”没用，“花了 20.43/20.00”才有用。"""
+    budget = DailyBudget(spent_cny=Decimal("20.4321"), limit_cny=20.0)
+
+    assert budget.exceeded is True
+    assert budget.off is False
+    reason = budget.degraded_reason()
+    assert reason.startswith("cost:")
+    assert "20.4321" in reason
+    assert "20.00" in reason
+
+
+def test_disabled_budget_is_not_the_same_as_exhausted() -> None:
+    """`limit <= 0` 是「配置里关掉了」，不是「预算用完了」—— 两者别混。"""
+    disabled = DailyBudget(spent_cny=Decimal("500"), limit_cny=0)
+
+    assert disabled.off is True
+    assert disabled.exceeded is False
+    assert DailyBudget(spent_cny=Decimal("0"), limit_cny=20.0).off is False

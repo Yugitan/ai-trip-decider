@@ -33,6 +33,7 @@ def test_derived_dirs_are_under_project_root() -> None:
     assert paths.curated_data_dir() == root / "backend" / "data" / "curated"
     assert paths.docs_dir() == root / "docs"
     assert paths.env_file() == root / ".env"
+    assert paths.frontend_dir() == root / "frontend"
 
 
 def test_config_dir_actually_has_configs() -> None:

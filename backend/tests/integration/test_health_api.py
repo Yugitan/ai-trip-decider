@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from decimal import Decimal
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -36,6 +39,80 @@ def test_health_reports_status_and_degraded_modes(client: TestClient) -> None:
     assert response.headers["X-Request-Id"]
     assert response.headers["X-Content-Type-Options"] == "nosniff"
     assert response.headers["X-Frame-Options"] == "DENY"
+
+
+def test_health_reports_the_thresholds_that_actually_trip(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """★ `/health` 报的熔断阈值必须是**真正在执行的那两个数**。
+
+    熔断器读 `config/limits.yaml`（`plan_service` 里 `breaker=limits.cost.circuit_breaker`），
+    而 `Settings` 里有同名镜像变量。曾经报的是镜像：把它改成 99 会让 `/health`
+    高高兴兴地显示“99 元熔断”，而请求仍然在 1 元处被拦下 ——
+    两边默认值恰好相等，所以这个谎言一直没被看见。
+    """
+    from app.core.config import clear_config_cache, get_limits_config
+
+    limits = get_limits_config().cost.circuit_breaker
+
+    monkeypatch.setenv("PLAN_COST_CIRCUIT_BREAKER_CNY", "99")
+    monkeypatch.setenv("SEARCH_COST_CIRCUIT_BREAKER_CNY", "99")
+    clear_config_cache()
+    try:
+        data = client.get("/api/v1/health").json()["data"]
+    finally:
+        clear_config_cache()
+
+    assert data["cost_breakers"]["plan_total_cny"] == limits.plan_total_cny
+    assert data["cost_breakers"]["plan_search_cny"] == limits.plan_search_cny
+    assert data["cost_breakers"]["plan_total_cny"] != 99.0
+
+
+def test_health_reports_today_spend_and_global_budget(
+    client: TestClient, cost_row_factory: Callable[[str], int]
+) -> None:
+    """★ 全局日成本必须真的被读、并被报出来（PRD §15.4 第四级熔断）。
+
+    `config/limits.yaml` 里一直写着 `cost.global_daily_cny: 20.00`，
+    但 2026-09-15 之前**没有任何代码读它** —— 一个拦不住支出的阈值比没有更危险：
+    看到它在那里，人就会以为已经有兜底了。
+
+    这里查的不是“字段在不在”，而是“往今天的账里插一笔钱，它是不是真的动了”。
+    """
+    from app.core.config import get_limits_config
+
+    limit = get_limits_config().cost.global_daily_cny
+    cost_row_factory(str(float(limit) + 5))
+
+    data = client.get("/api/v1/health").json()["data"]
+
+    assert data["cost"]["global_daily_budget_cny"] == limit
+    assert Decimal(data["cost"]["daily_spend_cny"]) >= Decimal(str(limit))
+    assert data["cost"]["budget_exceeded"] is True
+    assert data["cost"]["disabled_by_config"] is False
+
+
+def test_health_cost_block_is_null_not_false_when_it_cannot_tell(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """查不到 ≠ 没超：库读不出来时 `budget_exceeded` 必须是 **None**。
+
+    报 False 等于向运维保证“还没超预算”，而那是一句没有根据的话 ——
+    与本项目一直守的「null ≠ 0」是同一条规矩。
+    """
+    from app.api.v1 import health as health_module
+
+    class _Boom:
+        def __init__(self, _session: object) -> None:
+            raise RuntimeError("假装库挂了")
+
+    monkeypatch.setattr(health_module, "CostStore", _Boom)
+
+    data = client.get("/api/v1/health").json()["data"]
+
+    assert data["cost"]["budget_exceeded"] is None
+    assert data["cost"]["daily_spend_cny"] is None
+    assert data["cost"]["unavailable"] == "RuntimeError"
 
 
 def test_health_reports_schema_not_ready_when_tables_missing(client: TestClient) -> None:
