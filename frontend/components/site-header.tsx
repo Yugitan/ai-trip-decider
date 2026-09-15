@@ -19,11 +19,12 @@ import Link from "next/link";
  * 不会出现横向滚动；主导航 CTA 在手机上隐藏（Hero 里有同样可达的入口）。
  */
 
-export type NavKey = "home" | "explore" | "about" | "dev";
+export type NavKey = "home" | "explore" | "me" | "about" | "dev";
 
 const NAV_ITEMS: ReadonlyArray<{ key: NavKey; href: string; label: string }> = [
   { key: "home", href: "/", label: "首页" },
   { key: "explore", href: "/explore/guangzhou", label: "浏览知识库" },
+  { key: "me", href: "/me", label: "我的行程" },
   { key: "about", href: "/about/data", label: "数据来源" },
 ];
 

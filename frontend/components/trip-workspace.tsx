@@ -11,6 +11,7 @@ import {
   type RevisionDiff,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { rememberRecentTrip } from "@/lib/recent-trips";
 import {
   describeFailure,
   FailureBlock,
@@ -101,6 +102,18 @@ export function TripWorkspace({
     setCurrentId(tripId);
     resetFeedback();
   }, [tripId, resetFeedback]);
+
+  /**
+   * 把「这一版」记进本地台账（`/me` 我的行程）。
+   *
+   * 刻意挂在**取回成功**之后而不是规划成功之后：决定"这一版是什么"的只有接口返回的
+   * 那份数据（`trip_id` 与标题），事件流里根本没有它们；挂在规划成功处还会漏掉
+   * 「刷新行程自己的页面」「复制别人的路线」这两条同样产生了"我的一份行程"的路径。
+   */
+  useEffect(() => {
+    if (trip === null) return;
+    rememberRecentTrip({ id: trip.trip_id, title: trip.title });
+  }, [trip]);
 
   /**
    * 切到另一个版本。
