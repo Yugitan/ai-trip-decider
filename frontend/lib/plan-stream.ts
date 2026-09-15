@@ -58,12 +58,26 @@ export interface PlanStreamOptions {
   sourceFactory?: EventSourceFactory;
 }
 
+/**
+ * ⚠️ `withCredentials` 必须与 `lib/api.ts` 的 `REQUEST_CREDENTIALS` 保持一致。
+ *
+ * 这里是**唯一**一直带着凭证的通道，而 `fetch` 那边默认是 `same-origin`
+ * （跨域下等于不带）—— 于是同一次「开始规划」会落到两个不同的会话上：
+ * 进度流能收到事件，`GET /trips/{id}` 却因为会话对不上而 403。
+ * 改其中一处就必须改另一处。
+ */
 function defaultFactory(url: string): EventSourceLike {
   return new EventSource(url, { withCredentials: true }) as unknown as EventSourceLike;
 }
 
-/** 把相对路径拼成绝对地址（后端返回的是 `/api/v1/trips/{id}/stream`）。 */
-export function absoluteStreamUrl(streamUrl: string): string {
+/**
+ * 补全 `stream_url`（后端返回的是相对路径 `/api/v1/trips/{id}/stream`）。
+ *
+ * 默认部署下 `API_BASE_URL` 是空串（同源，见 `lib/api.ts`），于是这里原样返回相对路径 ——
+ * EventSource 会按文档基址解析它，请求同样走 Next 的 `rewrites` 代理。
+ * 只有显式配了 `NEXT_PUBLIC_API_BASE_URL` 时才会拼成跨站绝对地址。
+ */
+export function resolveStreamUrl(streamUrl: string): string {
   if (/^https?:\/\//i.test(streamUrl)) return streamUrl;
   return `${API_BASE_URL}${streamUrl.startsWith("/") ? "" : "/"}${streamUrl}`;
 }
@@ -92,7 +106,7 @@ export function subscribeToPlan(
     return () => {};
   }
 
-  const source = factory(absoluteStreamUrl(streamUrl));
+  const source = factory(resolveStreamUrl(streamUrl));
 
   source.addEventListener("plan.started", (event) => {
     const payload = parse<{ request_id?: string }>(event);

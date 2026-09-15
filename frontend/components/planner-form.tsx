@@ -10,6 +10,7 @@ import {
   type PlanProgressEvent,
 } from "@/lib/plan-stream";
 import { LlmSummary } from "@/components/llm-summary";
+import { TripWorkspace } from "@/components/trip-workspace";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ChipButton, ChipToggle } from "@/components/ui/chip";
@@ -660,37 +661,44 @@ export function PlannerForm() {
           </div>
         </div>
 
-        <div role="status" aria-live="polite">
-          {isSubmitting ? (
-            <p className="animate-stage border-t border-line px-5 py-4 text-sm text-ink-soft sm:px-7">
-              正在把这份需求发给规划服务…
-            </p>
-          ) : null}
-          {submission.kind === "failed" ? (
-            <FailurePanel failure={submission.failure} />
-          ) : null}
-          {submission.kind === "accepted" ? (
-            <AcceptedPanel
-              requestId={submission.requestId}
-              streamUrl={submission.streamUrl}
-            />
-          ) : null}
-        </div>
-
-        {outgoing === null ? null : (
-          <div className="border-t border-line px-5 py-5 sm:px-7">
-            <p className="text-xs font-medium text-ink-soft">
-              即将发给后端的请求内容（POST /api/v1/trips:plan）
-            </p>
-            <pre
-              data-testid="plan-payload"
-              className="mt-2 max-w-full overflow-x-auto rounded-btn border border-line bg-sand p-3 text-xs leading-relaxed text-ink"
-            >
-              <code>{JSON.stringify(outgoing, null, 2)}</code>
-            </pre>
-          </div>
-        )}
       </form>
+
+      {/*
+       * ★ 结果区放在 <form> **外面** ★
+       * 1. 它不是表单字段（主提交按钮已经在上面），塞在表单里语义上就是错的；
+       * 2. 更要紧的是：结果区里有「改路线」自己的 <form>（见 trip-workspace.tsx），
+       *    form 套 form 是非法 HTML，浏览器会直接报 hydration 错误。
+       */}
+      <div role="status" aria-live="polite">
+        {isSubmitting ? (
+          <p className="animate-stage border-t border-line px-5 py-4 text-sm text-ink-soft sm:px-7">
+            正在把这份需求发给规划服务…
+          </p>
+        ) : null}
+        {submission.kind === "failed" ? (
+          <FailurePanel failure={submission.failure} />
+        ) : null}
+        {submission.kind === "accepted" ? (
+          <AcceptedPanel
+            requestId={submission.requestId}
+            streamUrl={submission.streamUrl}
+          />
+        ) : null}
+      </div>
+
+      {outgoing === null ? null : (
+        <div className="border-t border-line px-5 py-5 sm:px-7">
+          <p className="text-xs font-medium text-ink-soft">
+            即将发给后端的请求内容（POST /api/v1/trips:plan）
+          </p>
+          <pre
+            data-testid="plan-payload"
+            className="mt-2 max-w-full overflow-x-auto rounded-btn border border-line bg-sand p-3 text-xs leading-relaxed text-ink"
+          >
+            <code>{JSON.stringify(outgoing, null, 2)}</code>
+          </pre>
+        </div>
+      )}
     </Card>
   );
 }
@@ -778,14 +786,15 @@ function AcceptedPanel({
             {completed.cached ? "（命中缓存，未重新计算）" : ""}
           </p>
           <LlmSummary llm={completed.llm} />
-          {completed.degraded_modes.length > 0 ? (
-            <p className="text-xs leading-relaxed text-ink-soft">
-              当前降级模式：{completed.degraded_modes.join("；")}
-            </p>
-          ) : null}
-          <p className="text-xs leading-relaxed text-ink-soft">
-            完整路线卡片（地图 · 可修改 · 可分享）属于 M5 —— 这里不先给你一份假行程。
-          </p>
+          {/*
+           * ★ 事件里没有路线，必须再取一次 ★
+           * `plan.completed` 只带元信息（方案数 / 缓存 / 模型用量 / trip_id），
+           * 此前这里只有一句「已生成 N 套方案」，用户点完看不到任何一条路线。
+           * 真正的行程在 `GET /trips/{trip_id}`（见 trip-workspace.tsx），
+           * 后面的「改路线 / 撤销 / 分享」也都长在那一份行程上。
+           * 降级模式由行程自己带回来，不再从事件里重复展示。
+           */}
+          <TripWorkspace tripId={completed.trip_id} />
         </div>
       ) : null}
 

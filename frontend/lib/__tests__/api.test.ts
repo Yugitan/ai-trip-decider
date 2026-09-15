@@ -16,12 +16,19 @@ import {
   API_BASE_URL,
   ApiError,
   NetworkError,
+  REQUEST_CREDENTIALS,
+  REVISION_INSTRUCTION_LIMIT,
   getCityStats,
   getHealth,
+  getSharedTrip,
+  getTrip,
   listCities,
   listPlaces,
   listRoutes,
   planTrip,
+  reviseTrip,
+  shareTrip,
+  undoTrip,
 } from "@/lib/api";
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -104,6 +111,29 @@ describe("request 成功路径", () => {
     const init = lastInit();
     expect(init.cache).toBe("no-store");
     expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+  });
+
+  it("★ 默认同源：请求打到 Next 自己的 /api（会话 cookie 必须是第一方的）", () => {
+    // 回归：曾经把后端地址内联成 http://127.0.0.1:8000，于是页面(localhost:3000)
+    // 与接口成了跨站，后端签发的 td_session 成了第三方 cookie 并被浏览器丢弃，
+    // 结果 GET /trips/{id} 稳定 403「这个行程不属于当前会话」。
+    // 现在由 next.config.ts 的 rewrites 做同源代理（详见该文件的说明）。
+    expect(API_BASE_URL).toBe("");
+  });
+
+  it("★ 每个请求都带会话凭证（缺了它，行程接口必然 403）", async () => {
+    // 回归：这个问题真的发生过 —— 前端(localhost:3000) → 后端(127.0.0.1:8000) 是跨域，
+    // 而 fetch 默认的凭证模式是 same-origin，于是后端 `Set-Cookie: td_session=…`
+    // 被浏览器直接丢弃。后果是 GET /trips/{id} 稳定 403「这个行程不属于当前会话」：
+    // 每次请求都是一个新会话，而行程是按浏览器会话隔离的。
+    // 必须与 lib/plan-stream.ts 的 `withCredentials: true` 保持一致，
+    // 否则同一次「开始规划」会分裂成两个会话。
+    fetchMock.mockResolvedValue(jsonResponse(okEnvelope({ status: "ok" })));
+
+    await getHealth();
+
+    expect(lastInit().credentials).toBe(REQUEST_CREDENTIALS);
+    expect(REQUEST_CREDENTIALS).toBe("include");
   });
 
   it("调用方传入的 headers 会被保留", async () => {
@@ -399,6 +429,206 @@ describe("planTrip", () => {
     await planTrip({ ...PAYLOAD, budget: null });
 
     expect(JSON.parse(String(lastInit().body))).toMatchObject({ budget: null });
+  });
+});
+
+// ── 读取行程（GET /trips/{id}）──────────────────────────────────────────────
+//
+// 这是「点开始规划之后到底能看到什么」的那一步：`plan.completed` 事件里只有元信息，
+// 路线与站点只能从这里读回来。
+
+describe("getTrip", () => {
+  const TRIP = {
+    trip_id: "trip-1",
+    request_id: "req-1",
+    city: "guangzhou",
+    title: "广州 · 09:00–21:00",
+    days: 1,
+    revision_no: 1,
+    route_count: 1,
+    routes: [],
+    degraded_modes: ["search:未配置搜索 API Key（只读本地知识库，不联网）"],
+  };
+
+  it("打到 /api/v1/trips/{id}，并把 id 编码（避免路径注入）", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(okEnvelope(TRIP)));
+
+    await getTrip("a b/c");
+
+    expect(lastUrl()).toBe(`${API_BASE_URL}/api/v1/trips/a%20b%2Fc`);
+  });
+
+  it("只读请求：不带 method / body，但必须带凭证", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(okEnvelope(TRIP)));
+
+    await getTrip("trip-1");
+
+    const init = lastInit();
+    expect(init.method).toBeUndefined();
+    expect(init.body).toBeUndefined();
+    expect(init.credentials).toBe("include");
+  });
+
+  it("把 envelopes 里的行程交给调用方（包含不确定字段）", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(okEnvelope(TRIP)));
+
+    const result = await getTrip("trip-1");
+
+    expect(result.data.trip_id).toBe("trip-1");
+    expect(result.data.degraded_modes).toEqual([
+      "search:未配置搜索 API Key（只读本地知识库，不联网）",
+    ]);
+  });
+
+  it("403 时抛出带 code / hint 的 ApiError（界面据此说明归属问题）", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        errorEnvelope({
+          code: "FORBIDDEN",
+          message: "这个行程不属于当前会话",
+          hint: "请回到创建它的浏览器（游客行程按浏览器会话隔离）。",
+        }),
+        { status: 403 },
+      ),
+    );
+
+    const error = (await getTrip("trip-1").catch((e: unknown) => e)) as ApiError;
+
+    expect(error.code).toBe("FORBIDDEN");
+    expect(error.status).toBe(403);
+    expect(error.hint).toContain("浏览器会话");
+  });
+});
+
+// ── 改路线 / 撤销 / 分享 ────────────────────────────────────────────────────
+//
+// 三个端点都靠 `trip_id` 定位、都按会话判归属，所以除了参数与路径，
+// 这里还钉住"必须带凭证"这条共性。
+
+describe("reviseTrip", () => {
+  it("POST 到 /trips/{id}/revise，指令原样放进 body", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(okEnvelope({ trip_id: "trip-2", revision_no: 2, diff: {}, needs_clarification: null })),
+    );
+
+    await reviseTrip("trip-1", "别去广州塔");
+
+    expect(lastUrl()).toBe(`${API_BASE_URL}/api/v1/trips/trip-1/revise`);
+    const init = lastInit();
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(String(init.body))).toEqual({ instruction: "别去广州塔" });
+    expect(init.credentials).toBe("include");
+  });
+
+  it("trip_id 会被 URL 编码", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(okEnvelope({ trip_id: "t", revision_no: 2, diff: {}, needs_clarification: null })),
+    );
+
+    await reviseTrip("a b/c", "x");
+
+    expect(lastUrl()).toBe(`${API_BASE_URL}/api/v1/trips/a%20b%2Fc/revise`);
+  });
+
+  it("★ 长度上限与服务端一致（300），前端不该发一个必然 422 的请求", async () => {
+    // 后端 `RevisionRequest.instruction` 是 max_length=300
+    expect(REVISION_INSTRUCTION_LIMIT).toBe(300);
+  });
+
+  it("把 needs_clarification 原样交给调用方（那不是错误）", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        okEnvelope({ trip_id: "trip-1", revision_no: 1, diff: {}, needs_clarification: "没能理解「随便改改」" }),
+      ),
+    );
+
+    const result = await reviseTrip("trip-1", "随便改改");
+
+    expect(result.data.needs_clarification).toBe("没能理解「随便改改」");
+  });
+});
+
+describe("undoTrip", () => {
+  it("POST 到 /trips/{id}/undo，返回的是上一版行程", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(okEnvelope({ trip_id: "trip-0", revision_no: 1 })));
+
+    const result = await undoTrip("trip-1");
+
+    expect(lastUrl()).toBe(`${API_BASE_URL}/api/v1/trips/trip-1/undo`);
+    const init = lastInit();
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeUndefined();
+    expect(init.credentials).toBe("include");
+    expect(result.data.trip_id).toBe("trip-0");
+  });
+
+  it("已经是最早版本时抛出带 hint 的 ApiError（界面原话转述）", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        errorEnvelope({
+          code: "INVALID_INPUT",
+          message: "这已经是最早的版本了，没有可以撤销的修改。",
+          hint: "继续修改会生成新的版本。",
+        }),
+        { status: 422 },
+      ),
+    );
+
+    const error = (await undoTrip("trip-1").catch((e: unknown) => e)) as ApiError;
+
+    expect(error.code).toBe("INVALID_INPUT");
+    expect(error.status).toBe(422);
+    expect(error.message).toContain("最早");
+  });
+});
+
+describe("shareTrip", () => {
+  it("POST 到 /trips/{id}/share，body 是 {public}", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(okEnvelope({ slug: "s1", url: "http://localhost:3000/t/s1", is_public: true })),
+    );
+
+    const result = await shareTrip("trip-1", true);
+
+    expect(lastUrl()).toBe(`${API_BASE_URL}/api/v1/trips/trip-1/share`);
+    expect(JSON.parse(String(lastInit().body))).toEqual({ public: true });
+    expect(result.data.url).toBe("http://localhost:3000/t/s1");
+  });
+
+  it("取消分享发的是 public: false（后端真的会让链接 404）", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(okEnvelope({ slug: "s1", url: "http://localhost:3000/t/s1", is_public: false })),
+    );
+
+    const result = await shareTrip("trip-1", false);
+
+    expect(JSON.parse(String(lastInit().body))).toEqual({ public: false });
+    expect(result.data.is_public).toBe(false);
+  });
+});
+
+describe("getSharedTrip", () => {
+  it("GET /public/trips/{slug}，slug 会被编码", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(okEnvelope({ trip_id: "t", routes: [] })));
+
+    await getSharedTrip("a b/c");
+
+    expect(lastUrl()).toBe(`${API_BASE_URL}/api/v1/public/trips/a%20b%2Fc`);
+    expect(lastInit().method).toBeUndefined();
+  });
+
+  it("链接失效（404 SHARE_NOT_FOUND）时抛出可展示的 ApiError", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        errorEnvelope({ code: "SHARE_NOT_FOUND", message: "这个分享链接不存在或已失效" }),
+        { status: 404 },
+      ),
+    );
+
+    const error = (await getSharedTrip("gone").catch((e: unknown) => e)) as ApiError;
+
+    expect(error.code).toBe("SHARE_NOT_FOUND");
+    expect(error.status).toBe(404);
   });
 });
 

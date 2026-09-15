@@ -7,8 +7,9 @@
 
 import { describe, expect, it, vi } from "vitest";
 
+import { API_BASE_URL } from "@/lib/api";
 import type { EventSourceLike } from "@/lib/plan-stream";
-import { absoluteStreamUrl, subscribeToPlan } from "@/lib/plan-stream";
+import { resolveStreamUrl, subscribeToPlan } from "@/lib/plan-stream";
 
 class FakeEventSource implements EventSourceLike {
   readonly listeners = new Map<string, ((event: MessageEvent) => void)[]>();
@@ -63,11 +64,17 @@ const LLM = {
 };
 
 describe("subscribeToPlan", () => {
-  it("把相对 stream_url 拼成后端绝对地址", () => {
-    expect(absoluteStreamUrl("/api/v1/trips/x/stream")).toBe(
-      "http://127.0.0.1:8000/api/v1/trips/x/stream",
+  it("相对 stream_url 默认保持同源（走 Next 的 /api 代理）", () => {
+    // 默认 API_BASE_URL 是空串：同源请求才会带上第一方会话 cookie，
+    // 而跨站的 Set-Cookie 会被浏览器当作第三方 cookie 丢掉（详见 lib/api.ts）。
+    expect(API_BASE_URL).toBe("");
+    expect(resolveStreamUrl("/api/v1/trips/x/stream")).toBe(
+      "/api/v1/trips/x/stream",
     );
-    expect(absoluteStreamUrl("https://api.example.com/s")).toBe("https://api.example.com/s");
+    // 后端如果哪天直接给绝对地址，就照用，不再拼一次
+    expect(resolveStreamUrl("https://api.example.com/s")).toBe("https://api.example.com/s");
+    // 没带前导斜杠的相对路径也能拼对
+    expect(resolveStreamUrl("api/v1/x")).toBe("/api/v1/x");
   });
 
   it("解析进度与完成事件（含 meta.llm）", () => {

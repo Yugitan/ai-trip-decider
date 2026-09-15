@@ -8,8 +8,38 @@
  * 安全：这里只能访问我们自己的后端。任何第三方 Key 都不得出现在前端。
  */
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+/**
+ * 后端地址（**服务端**用）。Next 只读 `frontend/.env*`，所以本机开发时通常取不到值，
+ * 落到后端 `make dev-backend` 监听的地址。
+ */
+const SERVER_SIDE_BASE_URL = (
+  process.env.API_BASE_URL ?? "http://127.0.0.1:8000"
+).replace(/\/+$/, "");
+
+/**
+ * 算出访问后端的基地址。
+ *
+ * **浏览器**：空串 = 同源。请求打到 `/api/v1/...`，由 `next.config.ts` 的 `rewrites`
+ * 转发给后端。这不是为了省一次 CORS，而是**必须**：页面在 `localhost:3000`、
+ * 后端在 `127.0.0.1:8000` 时两者是跨站的，后端签发的游客会话 cookie 就成了
+ * 第三方 cookie —— 浏览器会直接丢掉它，于是每个请求都是新会话，
+ * `GET /trips/{id}` 永远 403，规划结果永远读不回来。
+ *
+ * **服务端（RSC / SSR）**：必须用**绝对**地址直连后端 —— Node 的 `fetch`
+ * 收到相对 URL 会直接抛 `Failed to parse URL`。这条路径不带 cookie，
+ * 只用来取公开/只读数据（如分享页），所以同源与否在这里没有意义。
+ *
+ * 独立成函数是为了能被单测写出两个环境的取值：模块加载时它就被定下来了，
+ * 测试里没法再换一个 `window`。
+ */
+export function resolveApiBaseUrl(options: { serverSide: boolean }): string {
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) return process.env.NEXT_PUBLIC_API_BASE_URL;
+  return options.serverSide ? SERVER_SIDE_BASE_URL : "";
+}
+
+export const API_BASE_URL = resolveApiBaseUrl({
+  serverSide: typeof window === "undefined",
+});
 
 /**
  * 某次请求里 LLM 的真实使用情况（后端 `meta.llm`）。
@@ -101,6 +131,25 @@ function isAbortError(cause: unknown): boolean {
 }
 
 /**
+ * **必须带凭证**（`credentials: "include"`），否则后端的会话 cookie 会被浏览器丢掉。
+ *
+ * 这是一个真实踩过的坑：前端（`localhost:3000`）与后端（`127.0.0.1:8000`）是**跨域**的，
+ * 而 `fetch` 的默认凭证模式是 `same-origin` —— 跨域响应上的 `Set-Cookie: td_session=…`
+ * 既不会被发送、也不会被保存。后果是所有按会话隔离的接口
+ * （`GET /trips/{id}`、`revise`、`undo`、`share`）都拿不到自己的行程，
+ * 稳定返回 403 `FORBIDDEN`「这个行程不属于当前会话」：
+ * 每次请求都是一个全新的会话，而行程是**按浏览器会话隔离**的。
+ *
+ * 注意这里必须与 `lib/plan-stream.ts` 的 `withCredentials: true` 一致：
+ * 进度流（SSE）本来就是带凭证的，如果 POST 不带，同一次「开始规划」会分裂成两个会话 ——
+ * 界面能收到进度，却永远读不到这份进度对应的行程。
+ *
+ * 后端侧不需要任何改动：CORS 已经回 `Access-Control-Allow-Credentials: true`
+ * 与精确的 `Access-Control-Allow-Origin`（见 `backend/app/main.py`）。
+ */
+export const REQUEST_CREDENTIALS: RequestCredentials = "include";
+
+/**
  * 统一请求出口。导出是为了让其它 API 模块（如开发面板）复用 envelope 解析 ——
  * 各自再写一份 fetch 就意味着错误映射会慢慢漂移。
  */
@@ -113,6 +162,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<ApiR
         "Content-Type": "application/json",
         ...(init?.headers ?? {}),
       },
+      credentials: REQUEST_CREDENTIALS,
       cache: "no-store",
     });
   } catch (cause) {
@@ -227,6 +277,230 @@ export function planTrip(payload: PlanRequest): Promise<ApiResult<{ request_id: 
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+/**
+ * 完整行程（`GET /api/v1/trips/{id}`，PRD §7.2）。
+ *
+ * 为什么 `plan.completed` 之后还要再请求一次：SSE 事件里只有**元信息**
+ * （方案数 / 是否命中缓存 / 模型用量 / `trip_id`），路线与站点从来不进事件流。
+ * 所以"点开始规划之后看不到东西"的唯一修法就是拿 `trip_id` 把行程读回来。
+ *
+ * 与后端 `app/schemas/trips.py` 的 `TripOut` / `TripRouteOut` / `TripStopOut` 一一对应。
+ * 几个**刻意保留的不确定性字段**（界面的诚实性就靠它们，客户端不得当作可省略的装饰）：
+ * - `budget_estimated` / `budget_unknown_items`：金额里有多少是估算、哪些项根本没价格；
+ * - `transport_source`（`amap` / `osrm` / `estimated` / `manual`）：这趟交通是实测还是估算；
+ * - `feasibility.violations` / `warnings`：可行性校验的硬性失败与软性提醒；
+ * - `route_count_note`：少于 3 套方案时**为什么**少，而不是凑数。
+ */
+export interface TripStop {
+  seq: number;
+  place_id: string;
+  name: string;
+  category: string;
+  latitude: number;
+  longitude: number;
+  district: string | null;
+  arrive_time: string;
+  depart_time: string;
+  stay_min: number;
+  transport_mode: string | null;
+  transport_min: number | null;
+  transport_distance_m: number | null;
+  /** amap | osrm | estimated | manual —— 界面对 `estimated` 必须如实标注 */
+  transport_source: string | null;
+  why_recommended: string | null;
+  tips: string | null;
+  /** 校验码（如 `ESTIMATED_TRANSIT` / `HOURS_UNKNOWN`），不是给人看的句子 */
+  warnings?: string[];
+  snapshot?: Record<string, unknown>;
+}
+
+/** 可行性校验项。字段可缺省：这是**接口返回的不可信输入**，读取方必须自己容错。 */
+export interface TripFeasibilityItem {
+  code?: string;
+  severity?: string;
+  at_seq?: number | null;
+  /** 后端已经写好的人话，界面优先用它而不是自己编 */
+  message?: string;
+  detail?: Record<string, unknown>;
+}
+
+export interface TripFeasibility {
+  feasible?: boolean;
+  /** 硬性失败（不该出现在用户手里的方案里） */
+  violations?: TripFeasibilityItem[];
+  /** 软性提醒（信息缺口、估算值…） */
+  warnings?: TripFeasibilityItem[];
+  metrics?: Record<string, number>;
+}
+
+export interface TripRoute {
+  id: string;
+  /** A / B / C */
+  label: string;
+  archetype: string;
+  theme: string | null;
+  name: string;
+  /** 由**代码**算出来的站数/时长/步行距离，与模型写的文案严格分开 */
+  one_liner: string | null;
+  place_count: number;
+  total_duration_min: number;
+  walking_distance_m: number | null;
+  transit_time_min: number | null;
+  transit_distance_m: number | null;
+  /** Decimal 在 JSON 里是**字符串**：前端不做浮点换算 */
+  budget_min: string | null;
+  budget_max: string | null;
+  budget_scope: string | null;
+  budget_estimated?: boolean;
+  budget_unknown_items?: string[];
+  recommend_score: number;
+  score_breakdown?: Record<string, unknown>;
+  feasibility?: TripFeasibility;
+  best_for?: string[];
+  highlights?: string[];
+  pros?: string[];
+  cons?: string[];
+  /** 模型写的推荐理由（不含数字，见后端 llm_planner 的边界） */
+  recommendation_reason: string | null;
+  route_source: string | null;
+  template_route_id: string | null;
+  stops: TripStop[];
+}
+
+export interface TripOut {
+  trip_id: string;
+  request_id: string;
+  city: string;
+  title: string | null;
+  days: number;
+  revision_no: number;
+  route_count: number;
+  route_count_requested: number;
+  /** 少于期望方案数时的原因（如候选地点不足），null 表示正好给足 */
+  route_count_note?: string | null;
+  intent?: Record<string, unknown>;
+  degraded_modes: string[];
+  total_cost_cny: string;
+  generation_ms: number | null;
+  created_at: string | null;
+  is_public: boolean;
+  share_slug: string | null;
+  routes: TripRoute[];
+}
+
+/**
+ * 读取一份完整行程。
+ *
+ * 归属由后端按会话判定（trip 只能被创建它的浏览器读到），所以这个请求
+ * **依赖 `credentials: "include"`** —— 缺了它必然 403。
+ */
+export function getTrip(tripId: string): Promise<ApiResult<TripOut>> {
+  return request<TripOut>(`/api/v1/trips/${encodeURIComponent(tripId)}`);
+}
+
+// ── 改路线 / 撤销 / 分享（M5）──────────────────────────────────────────────
+
+/**
+ * 修改指令的长度上限，与后端 `RevisionRequest.instruction`（`max_length=300`）一致。
+ * 前端先按这个数限制输入，而不是等一个 422 回来才知道太长。
+ */
+export const REVISION_INSTRUCTION_LIMIT = 300;
+
+/**
+ * 两版行程的差异（后端 `DiffSummary.as_dict()`）。
+ *
+ * ★ 刻意**不收** `route_count_before/after` ★
+ * 后端那两个字段实际上是「首要路线的**站点**数」（见 `trip_service.best_route_signature`），
+ * 名字会骗人。界面不展示不确定含义的数字。
+ *
+ * 字段全部可缺省：这是接口返回的不可信输入，而且后端把它声明为 `dict[str, Any]`。
+ */
+export interface RevisionDiff {
+  removed?: string[];
+  added?: string[];
+  walking_before_m?: number;
+  walking_after_m?: number;
+  walking_delta_m?: number;
+  budget_before?: string | null;
+  budget_after?: string | null;
+  days_before?: number | null;
+  days_after?: number | null;
+  /** 后端拼好的一整句人话；界面优先用它，不自己再拼一遍 */
+  sentence?: string;
+}
+
+export interface RevisionOut {
+  /** 新版本的 trip_id（**与修改前不是同一条**） */
+  trip_id: string;
+  revision_no: number;
+  diff: RevisionDiff;
+  /** 非空表示"没听懂"：后端会反问一句，而不是静默丢搓或报错（AC-8.7） */
+  needs_clarification: string | null;
+}
+
+/**
+ * 用一句话改路线（PRD FR-08）。
+ *
+ * 后端**不联网**、不花模型的钱：规则引擎把指令解析成约束后本地重算（AC-8.2）。
+ * 解析不出增量时**不报错** —— 返回 `needs_clarification` 反问一句。
+ */
+export function reviseTrip(
+  tripId: string,
+  instruction: string,
+): Promise<ApiResult<RevisionOut>> {
+  return request<RevisionOut>(`/api/v1/trips/${encodeURIComponent(tripId)}/revise`, {
+    method: "POST",
+    body: JSON.stringify({ instruction }),
+  });
+}
+
+/**
+ * 撤销到上一版（PRD AC-8.5）。
+ *
+ * 返回的是**上一版那份行程本身**：撤销是沿版本链后退，不是原地改，
+ * 所以调用方要跟着切到新的 `trip_id`。已经是第一版时后端会返回
+ * `INVALID_INPUT`（"这已经是最早的版本了"）—— 它会变成一条可读的错误，而不是一个空响应。
+ */
+export function undoTrip(tripId: string): Promise<ApiResult<TripOut>> {
+  return request<TripOut>(`/api/v1/trips/${encodeURIComponent(tripId)}/undo`, {
+    method: "POST",
+  });
+}
+
+export interface ShareOut {
+  slug: string;
+  /** 已经拼好的前端分享页地址（`/t/{slug}`） */
+  url: string;
+  is_public: boolean;
+}
+
+/**
+ * 生成 / 取消公开链接（PRD FR-09）。
+ *
+ * ★ 取消分享是**真的失效**，不是前端藏起来 ★
+ * 后端在 `public=false` 时让 `GET /public/trips/{slug}` 立刻 404（AC-9.7），
+ * 界面的文案必须把这一点说清楚。
+ */
+export function shareTrip(
+  tripId: string,
+  isPublic: boolean,
+): Promise<ApiResult<ShareOut>> {
+  return request<ShareOut>(`/api/v1/trips/${encodeURIComponent(tripId)}/share`, {
+    method: "POST",
+    body: JSON.stringify({ public: isPublic }),
+  });
+}
+
+/**
+ * 读一份**别人分享出来**的行程（无鉴权，只返回已公开的那些）。
+ *
+ * 它在服务端被调用（分享页是 RSC），所以不依赖浏览器 cookie ——
+ * 这正是它跟 `getTrip` 的区别。
+ */
+export function getSharedTrip(slug: string): Promise<ApiResult<TripOut>> {
+  return request<TripOut>(`/api/v1/public/trips/${encodeURIComponent(slug)}`);
 }
 
 // ── 只读目录（知识库浏览）────────────────────────────────────────────────────

@@ -5,7 +5,14 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, NetworkError, planTrip, type ApiResult } from "@/lib/api";
+import {
+  ApiError,
+  NetworkError,
+  getTrip,
+  planTrip,
+  type ApiResult,
+  type TripOut,
+} from "@/lib/api";
 import { PREFERENCE_OPTIONS, PlannerForm } from "@/components/planner-form";
 
 /**
@@ -45,10 +52,48 @@ vi.mock("@/lib/api", async (importOriginal) => {
     ...actual,
     planTrip: vi.fn(),
     getHealth: vi.fn(),
+    // 受理之后表单会去 GET /trips/{id} 取回行程（见 trip-result.tsx）。
+    // 这里必须一起换掉：否则单元测试会真的发一个网络请求出去。
+    getTrip: vi.fn(),
   };
 });
 
 const planTripMock = vi.mocked(planTrip);
+const getTripMock = vi.mocked(getTrip);
+
+/** 受理之后的那次取回：给一份最小行程即可，本文件关心的是提交这一侧。 */
+const TRIP: TripOut = {
+  trip_id: "trip-1",
+  request_id: "req-1",
+  city: "guangzhou",
+  title: "广州 · 09:00–21:00",
+  days: 1,
+  revision_no: 1,
+  route_count: 3,
+  route_count_requested: 3,
+  intent: {},
+  degraded_modes: [],
+  total_cost_cny: "0",
+  generation_ms: 12,
+  created_at: null,
+  is_public: false,
+  share_slug: null,
+  routes: [],
+};
+
+beforeEach(() => {
+  getTripMock.mockReset();
+  getTripMock.mockResolvedValue({
+    data: TRIP,
+    meta: {
+      request_id: "req-1",
+      cached: false,
+      cache_layer: null,
+      degraded_modes: [],
+      elapsed_ms: 12,
+    },
+  });
+});
 
 type PlanResult = ApiResult<{ request_id: string; stream_url: string }>;
 
