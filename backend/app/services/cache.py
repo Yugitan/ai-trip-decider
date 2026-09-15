@@ -280,6 +280,23 @@ class CacheStore:
     ) -> None:
         # ttl_hours=None 表示"不过期"（结构化的 LLM 输出靠 prompt 版本失效，
         # 见 config/ttl.yaml 的 llm_structured）。这里用一个极远的过期时间表达。
+        #
+        # ★ 先查再插，而不是硬插 ★
+        # ``cache_key`` 唯一；两个并发规划算出同一个 prompt 时，后写的一方
+        # 会撞唯一约束。失败的 flush 会把整个会话打成 PendingRollback ——
+        # 上层 ``except`` 吞得掉异常，吞不掉这个状态，本次规划随后必然 500。
+        # 所以撞键时保留已有行（先到先得，两份内容等价：同一个键就是同一个
+        # prompt + 同一个 schema），并刷新命中时间。先用 SELECT 查一遍而不是
+        # 硬插后捕 IntegrityError：后者同样会污染当前事务。
+        existing = (
+            await self.session.execute(
+                select(LlmCache).where(LlmCache.cache_key == cache_key)
+            )
+        ).scalar_one_or_none()
+        expires_at = _expiry(ttl_hours) if ttl_hours is not None else _far_future()
+        if existing is not None:
+            existing.last_hit_at = datetime.now(UTC)
+            return
         self.session.add(
             LlmCache(
                 cache_key=cache_key,
@@ -292,7 +309,7 @@ class CacheStore:
                 tokens_out=tokens_out,
                 tokens_cached=tokens_cached,
                 cost_cny=cost_cny,
-                expires_at=_expiry(ttl_hours) if ttl_hours is not None else _far_future(),
+                expires_at=expires_at,
             )
         )
         await self.session.flush()

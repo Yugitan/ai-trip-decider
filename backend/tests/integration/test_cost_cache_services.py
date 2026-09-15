@@ -141,6 +141,50 @@ async def test_llm_cache_roundtrip_and_never_expiring(db_session: object) -> Non
     assert row["expires_at"] > datetime.now(UTC) + timedelta(days=3000)
 
 
+async def test_llm_cache_duplicate_write_does_not_poison_session(db_session: object) -> None:
+    """重复写同一个 cache_key 不得污染会话（2026-09-15 冒烟实测的真 bug）。
+
+    背景：``llm_cache.cache_key`` 唯一。两个并发规划算出同一个 prompt 时，
+    后写的一方撞唯一约束 —— 缓存层的 ``except`` 把异常吞了，但**失败的 flush
+    已把整个 SQLAlchemy 会话打成 PendingRollback**，本次规划随后在别处
+    （落 trips / cost_logs 时）必然 500，与注释写的"缓存写失败不影响本次结果"
+    直接矛盾。
+
+    修法：``put_llm`` 自己先查一遍，撞键时**更新已有行**（refresh `last_hit_at`），
+    而不是硬插。本测试用"重复写之后会话还能正常工作"钉住这个契约 ——
+    只断言"不抛异常"抓不到会话已被污染的形态。
+    """
+    session = _session(db_session)
+    store = CacheStore(session)
+    key = f"llm:{uuid.uuid4().hex}"
+
+    async def put(response: dict[str, str]) -> None:
+        await store.put_llm(
+            cache_key=key,
+            tier="fast",
+            model="deepseek-chat",
+            prompt_hash="abc",
+            task="route_narrative",
+            response=response,
+            ttl_hours=None,
+        )
+
+    await put({"answer": "first"})
+
+    # 同一个键写第二次（不同内容，模拟并发规划算出同一个 prompt）：
+    # 必须静默降级为"保留原行"，而不是把会话打成待回滚。
+    await put({"answer": "second"})
+
+    # 会话仍然可用：继续 flush / 查询都不该抛 PendingRollbackError。
+    await session.flush()
+    rows = (
+        await session.execute(LlmCache.__table__.select().where(LlmCache.cache_key == key))
+    ).mappings().all()
+    assert len(rows) == 1, "同一个 cache_key 只该有一行"
+    assert rows[0]["response"] == {"answer": "first"}, "撞键时保留先写入的那份"
+    assert await store.get_llm(key) == {"answer": "first"}
+
+
 async def test_llm_cache_ignores_expired_rows(db_session: object) -> None:
     session = _session(db_session)
     store = CacheStore(session)
