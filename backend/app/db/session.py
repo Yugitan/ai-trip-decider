@@ -7,12 +7,15 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
+from app.core.faults import DB_SLOW_DELAY_S, active_fault
 
 _engines: dict[str, AsyncEngine] = {}
 _sessionmakers: dict[str, async_sessionmaker[AsyncSession]] = {}
@@ -51,7 +54,26 @@ def get_sessionmaker(url: str | None = None) -> async_sessionmaker[AsyncSession]
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:
-    """FastAPI 依赖：每请求一个会话，异常时回滚。"""
+    """FastAPI 依赖：每请求一个会话，异常时回滚。
+
+    ★ 网络/数据库故障注入就装在这一道门上（PRD §23.5 的 ``db_down`` / ``db_slow``）★
+    两个都刻意**不是** AppError：
+
+    - ``db_down`` 抛真的 :class:`OperationalError`。数据库挂掉在现实里就是这种异常，
+      如果注入一个我们自己的异常类型，测到的就只是"我们自己写的那条分支"。
+      它必须被翻译成 503 ``DB_UNAVAILABLE`` + request_id（``main._db_error``），
+      而不是一个含糊的 500 —— 用户与运维都需要知道"是库不可用"。
+    - ``db_slow`` 睡 3 秒（PRD 写的时长），用来验证慢请求告警（``http.slow``）
+      与 ``X-Elapsed-Ms`` 真的在工作：没有这条注入，"卡了 3 秒但没人知道"
+      只能等到线上才发现。
+    """
+    fault = active_fault()
+    if fault == "db_down":
+        raise OperationalError(
+            "SELECT 1", {}, Exception("FAULT_INJECTION=db_down：模拟数据库不可用")
+        )
+    if fault == "db_slow":
+        await asyncio.sleep(DB_SLOW_DELAY_S)
     async with get_sessionmaker()() as session:
         try:
             yield session

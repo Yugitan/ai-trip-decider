@@ -14,7 +14,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 __all__ = [
     "BudgetInput",
@@ -28,6 +28,19 @@ __all__ = [
     "TripRouteOut",
     "TripStopOut",
 ]
+
+
+#: PostgreSQL 的 text / jsonb **不接受 NUL（U+0000）**（``cannot be converted to text``）。
+#: 现实反馈：用户粘贴一段带 NUL 的文本时，我们以前会一路走到 INSERT 才炸，
+#: 返回一个“数据库不可用”的 503 —— 数据库完全健康，错的是输入。
+#: 因此在这里就拦下来说清楚（输入异常测试里就是这么抓到它的）。
+_NUL = "\x00"
+
+
+def _reject_nul(value: str, *, field_name: str) -> str:
+    if _NUL in value:
+        raise ValueError(f"{field_name}里含有无法保存的控制字符（U+0000），请去掉后重试。")
+    return value
 
 
 class BudgetInput(BaseModel):
@@ -55,6 +68,11 @@ class PlanRequest(BaseModel):
     start_time: str | None = None
     end_time: str | None = None
     travel_date: str | None = None
+
+    @field_validator("free_text")
+    @classmethod
+    def _free_text_is_storable(cls, value: str) -> str:
+        return _reject_nul(value, field_name="补充说明")
 
 
 class PlanAcceptedOut(BaseModel):
@@ -156,6 +174,11 @@ class RevisionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     instruction: str = Field(min_length=1, max_length=300)
+
+    @field_validator("instruction")
+    @classmethod
+    def _instruction_is_storable(cls, value: str) -> str:
+        return _reject_nul(value, field_name="修改指令")
 
 
 class ShareRequest(BaseModel):

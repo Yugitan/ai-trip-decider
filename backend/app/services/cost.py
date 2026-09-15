@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import CircuitBreakerLimits, PricingConfig, ProviderLimits
 from app.core.errors import CostBreakerOpen
+from app.core.faults import fault_active
 from app.core.logging import get_logger
 from app.db.models import CostLog
 
@@ -366,7 +367,14 @@ class CostStore:
         "今天"按 **UTC 日历日** 算（与 ``cost_logs.created_at`` 的口径一致）——
         刻意不用本地时区：服务器时区一变，同一批数据会突然换一天，
         而预算这件事最不能允许的就是"数字因为部署位置而不同"。
+
+        ``FAULT_INJECTION=cost_breaker`` 时直接报"已花满上限"（PRD §23.5），
+        用来验证第四级熔断真的会降级返回（而不是把钱花超）。
         """
+        if fault_active("cost_breaker"):
+            # 报的金额就是上限本身：调用方读到的是一句话（“今日已花 X/上限 X”），
+            # 而不是一个真假难辨的 0 —— 降级原因里必须能看到数字。
+            return DailyBudget(spent_cny=Decimal(str(limit_cny)), limit_cny=limit_cny)
         moment = now or datetime.now(UTC)
         day_start = moment.replace(hour=0, minute=0, second=0, microsecond=0)
         spent = (

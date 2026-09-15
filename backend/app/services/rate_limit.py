@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.faults import fault_active
 from app.db.models import RateLimitCounter
 
 __all__ = ["RateLimitResult", "RateLimiter"]
@@ -42,9 +43,15 @@ class RateLimiter:
 
         ``limit <= 0`` 视为"不限制"（配置里把某项设为 0 表示关闭该限制），
         返回 ``allowed=True`` 且不写库 —— 让"关闭限流"不需要改代码。
+
+        ``FAULT_INJECTION=rate_limit`` 时**一律拒绝**（PRD §23.5），用来验证 429
+        与那句人话提示真的能到达用户。刻意排在 ``limit <= 0`` **之后**：
+        "显式关掉限流"是配置（人说的），比故障注入更优先。
         """
         if limit <= 0:
             return RateLimitResult(allowed=True, used=0, limit=0, retry_after_s=0)
+        if fault_active("rate_limit"):
+            return RateLimitResult(allowed=False, used=limit + 1, limit=limit, retry_after_s=60)
 
         now = datetime.now(UTC)
         window_start = _window_start(now, window_s)

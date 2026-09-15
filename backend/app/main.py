@@ -17,12 +17,14 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import __version__
 from app.api.v1.router import api_router
 from app.core.config import Settings, get_limits_config, get_pricing_config, get_scoring_config, get_settings
 from app.core.errors import AppError, ErrorCode
+from app.core.faults import validate_fault_name
 from app.core.logging import get_logger, get_request_id, new_request_id, set_request_id, setup_logging
 from app.db.session import dispose_engines
 from app.schemas.common import ApiMeta, ErrorBody, error_envelope
@@ -59,6 +61,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     limits = get_limits_config()
     pricing = get_pricing_config()
     settings.assert_safe_for_production()
+    # 故障名写错就直接启动失败：静默忽略会让"我测过故障降级"变成一句无法证伪的话
+    validate_fault_name(settings.fault_injection)
 
     log.info(
         "应用启动",
@@ -215,6 +219,42 @@ def create_app() -> FastAPI:
             ApiMeta(request_id=get_request_id()),
         )
         return JSONResponse(status_code=exc.status_code, content=body)
+
+    @app.exception_handler(DBAPIError)
+    async def _db_error(request: Request, exc: DBAPIError) -> JSONResponse:
+        """数据库层面的故障 → 503 + ``DB_UNAVAILABLE`` + request_id（PRD §23.5 的 ``db_down``）。
+
+        ★ 为什么必须单独接住它 ★
+        在这条处理器出现之前，数据库不可用会掉进兜底处理器，变成 500 ``INTERNAL``
+        与「服务出了点问题，请重试」—— 用户以为是我们的 bug，运维也拿不到
+        "坏的是数据库"这个信息。而它其实是一个**含义确定**的失败：
+        503 + ``DB_UNAVAILABLE`` 才能让人与监控一眼定位。
+        堆栈只进日志，不进响应体（PRD FR-13.2）；request_id 照常带上。
+        """
+        log.error(
+            "数据库不可用",
+            exc_info=exc,
+            extra={"event": "db.unavailable", "code": str(ErrorCode.DB_UNAVAILABLE)},
+        )
+        rid = get_request_id()
+        body = error_envelope(
+            ErrorBody(
+                code=str(ErrorCode.DB_UNAVAILABLE),
+                message="数据库暂时不可用，请稍后重试。",
+                hint="数据没有丢，等一会儿重新提交即可；若持续出现请把 X-Request-Id 反馈给我们。",
+                context={"path": request.url.path[:120]},
+            ),
+            ApiMeta(request_id=rid),
+        )
+        headers = dict(_SECURITY_HEADERS)
+        if rid:
+            headers["X-Request-Id"] = rid
+        origin = request.headers.get("origin")
+        if origin and origin in allowed_origins(settings):
+            headers["Access-Control-Allow-Origin"] = origin
+            headers["Access-Control-Allow-Credentials"] = "true"
+            headers["Vary"] = "Origin"
+        return JSONResponse(status_code=503, content=body, headers=headers)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:

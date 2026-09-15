@@ -29,7 +29,7 @@ from __future__ import annotations
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from datetime import time as dt_time
 from typing import Any
@@ -50,6 +50,7 @@ from app.core.config import (
     get_ttl_config,
 )
 from app.core.errors import AppError, ErrorCode
+from app.core.faults import fault_active
 from app.core.logging import get_logger, scrub
 from app.db.models import City, Place, Trip, TripRequest, TripRoute, TripRouteStop
 from app.domain.budget import estimate_route_budget
@@ -489,6 +490,11 @@ class PlanService:
             ),
         )
         selected = self._select(scored)
+        if fault_active("route_empty"):
+            # 注入："一个可行方案都排不出来"（PRD §23.5）。
+            # 刻意走**已有的**失败路径，而不是另造一条 —— 这条路的全部价值
+            # 就在于它对用户说的那句话（错误码、建议）是对的。
+            selected = []
         if not selected:
             raise AppError(
                 ErrorCode.NO_FEASIBLE_ROUTE,
@@ -1035,6 +1041,35 @@ class PlanService:
 
         stops_ids = [stop.place.id for item in selected for stop in item.plan.stops]
         snapshots = await self._stop_snapshots(stops_ids)
+        # 快照里缺席的 id = 那一行已经不在知识库里了（被删 / 建库换版 / 改名）。
+        # 这时必须**摘站并记账**，而不是拿领域对象里的旧快照顶上：后者会让行程里
+        # 出现一个"库里已经不存在"的地点，而且全程无声（PRD §23.5 的 place_missing）。
+        missing_ids = {pid for pid in stops_ids if pid not in snapshots}
+        entries, dropped_routes = _drop_missing_stops(
+            selected, missing_ids, min_stops=self.limits.planning.min_route_stops
+        )
+        if missing_ids:
+            skipped = tuple(name for _item, gone in entries for name in gone)
+            if skipped:
+                degraded = [
+                    *degraded,
+                    f"place_missing:{len(skipped)} 个站点已不在知识库中"
+                    f"（{'、'.join(skipped[:3])}），已从方案中摘除",
+                ]
+            if dropped_routes:
+                degraded = [
+                    *degraded,
+                    f"place_missing:{dropped_routes} 套方案因摘站后不足最少站点数被丢弃",
+                ]
+        if not entries:
+            raise AppError(
+                ErrorCode.NO_FEASIBLE_ROUTE,
+                "路线里引用的地点已经不在知识库中",
+                hint="知识库刚更新过，重新提交一次通常就好了。",
+            )
+        if len(entries) < len(selected):
+            # 方案数变了就不能沿用旧的说法：那句"期望 3 套"会与结果直接矛盾
+            note = self._route_count_note(len(entries))
 
         trip = Trip(
             request_id=request.id,
@@ -1044,10 +1079,10 @@ class PlanService:
             intent_snapshot={
                 **intent_to_dict(intent),
                 "route_count_note": note,
-                "selected": len(selected),
+                "selected": len(entries),
             },
             days=intent.days,
-            route_count=len(selected),
+            route_count=len(entries),
             generation_ms=elapsed_ms,
             # 只统计**真实发生**的外部调用成本（本地知识库查询不计）。
             # 配了 LLM Key 时这里不再是 0，而是一个带 calibrated 标记的量级值。
@@ -1061,7 +1096,7 @@ class PlanService:
         self.db.add(trip)
         await self.db.flush()
 
-        for order, item in enumerate(selected):
+        for order, (item, gone) in enumerate(entries):
             # 文案优先级：LLM 写的（已过数字/长度校验）> 模板（代码推导）。
             # 数字类字段（one_liner 里的站数/时长/步行）永远由代码算，模型不许碰。
             chosen = narrative.get(order)
@@ -1086,7 +1121,9 @@ class PlanService:
                 best_for=list(_best_for(item)),
                 highlights=_highlights(item),
                 pros=_pros(item),
-                cons=_cons(item),
+                # 被摘掉的站必须在“需要留意”里说出来：用户对照着旧版本看时，
+                # 会立刻发现少了一站 —— 那时他应该看到一句解释，而不是自己猜。
+                cons=[*_cons(item), f"{len(gone)} 个站点已不在知识库中，已跳过"] if gone else _cons(item),
                 recommendation_reason=chosen.reason if chosen is not None else _reason(item),
                 feasibility_report={
                     **item.report.as_dict(),
@@ -1152,7 +1189,7 @@ class PlanService:
                 "event": "plan.completed",
                 "context": {
                     "trip_id": str(trip.id),
-                    "routes": len(selected),
+                    "routes": len(entries),
                     "elapsed_ms": elapsed_ms,
                     "degraded": list(degraded),
                     # 将“用了/没用 LLM、用了几次、花了多少”写进日志：
@@ -1172,9 +1209,22 @@ class PlanService:
         )
 
     async def _stop_snapshots(self, place_ids: Sequence[str]) -> dict[str, dict[str, Any]]:
-        """为站点补充快照里的来源署名（FR-11：来源可追溯是硬性要求）。"""
+        """为站点补充快照里的来源署名（FR-11：来源可追溯是硬性要求）。
+
+        ``FAULT_INJECTION=place_missing`` 时**故意少查最后一个 id**（PRD §23.5）：
+        模拟"候选已解析、落库前那一行被删掉"这个真实存在的竞态，
+        用来验证摘站与降级记账真的会发生（而不仅仅是代码里写着会）。
+        """
         if not place_ids:
             return {}
+        if fault_active("place_missing"):
+            # 按**去重后的 id** 摘：同一个地点可能出现在多套方案里，
+            # 只删掉最后一次出现的话，它还会因为别处的出现被查回来 ——
+            # 注入就退化成了"什么都没发生"（第一版正是这么写的）。
+            doomed = list(dict.fromkeys(place_ids))[-1]
+            place_ids = [pid for pid in place_ids if pid != doomed]
+            if not place_ids:
+                return {}
         try:
             ids = [uuid.UUID(pid) for pid in place_ids]
         except ValueError:  # pragma: no cover - 领域 id 一定来自数据库
@@ -1210,6 +1260,43 @@ class PlanService:
 # ════════════════════════════════════════════════════════════════════════════
 # 纯展示推导（全部来自数据，不编造）
 # ════════════════════════════════════════════════════════════════════════════
+
+
+def _drop_missing_stops(
+    selected: Sequence[_ScoredPlan], missing_ids: set[str], *, min_stops: int
+) -> tuple[list[tuple[_ScoredPlan, tuple[str, ...]]], int]:
+    """把引用了"已不存在地点"的站点从方案里摘掉（PRD §23.5 ``place_missing``）。
+
+    返回 ``(保留的方案与它们被摘掉的站名, 被整体丢弃的方案数)``：
+
+    - 摘完仍有 ``min_stops`` 站 ⇒ 保留这套方案，但把摘掉的站名带出去记账；
+    - 摘完不足 ⇒ 整套方案丢弃。一条只剩两三站的"路线"已经不该再端给用户，
+      而少报一套方案是可以解释的（``_route_count_note`` 会说明）。
+
+    ``missing_ids`` 为空时原样返回（正常路径上它恒为空 —— 站点 id 都来自数据库）。
+    刻意写成**纯函数**：摘站规则能被单测钉住，不需要跑一次带数据库的规划。
+    """
+    if not missing_ids:
+        return [(item, ()) for item in selected], 0
+    kept: list[tuple[_ScoredPlan, tuple[str, ...]]] = []
+    dropped_routes = 0
+    for item in selected:
+        gone = tuple(s.place.name for s in item.plan.stops if s.place.id in missing_ids)
+        if not gone:
+            kept.append((item, ()))
+            continue
+        stops = tuple(stop for stop in item.plan.stops if stop.place.id not in missing_ids)
+        if len(stops) < min_stops:
+            dropped_routes += 1
+            continue
+        plan = RoutePlan(
+            archetype=item.plan.archetype,
+            stops=stops,
+            theme=item.plan.theme,
+            budget=item.plan.budget,
+        )
+        kept.append((replace(item, plan=plan), gone))
+    return kept, dropped_routes
 
 
 def _jaccard(a: set[str], b: set[str]) -> float:

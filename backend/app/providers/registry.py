@@ -13,7 +13,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.core.config import LimitsConfig, Settings, get_limits_config, get_settings, get_ttl_config
+from app.core.faults import active_fault
 from app.providers.base import ProviderHealth
+from app.providers.faults import (
+    LLM_FAULTS,
+    MAP_FAULTS,
+    SEARCH_FAULTS,
+    FaultyLlmProvider,
+    FaultyMapProvider,
+    FaultySearchProvider,
+)
 from app.providers.llm.base import LlmProvider
 from app.providers.llm.deepseek import DeepSeekProvider
 from app.providers.llm.null import NullLlmProvider
@@ -58,12 +67,20 @@ def build_providers(
 ) -> Providers:
     cfg = settings or get_settings()
     lim = limits or get_limits_config()
-    return Providers(
-        llm=_build_llm(cfg),
-        search=_build_search(cfg),
-        map=_build_map(cfg, lim),
-        weather=_build_weather(cfg),
-    )
+    fault = active_fault(cfg)
+    llm = _build_llm(cfg)
+    search = _build_search(cfg)
+    mapped = _build_map(cfg, lim)
+    # ★ 故障注入在装配处收口 ★
+    # 放在这里而不是各 Provider 内部：provider 的实现不该知道"有没有人在测试它"，
+    # 而这里正好是全部 Provider 都会经过的唯一一道门（也是它们被换掉的地方）。
+    if fault in LLM_FAULTS:
+        llm = FaultyLlmProvider(provider=llm, fault=fault)
+    if fault in SEARCH_FAULTS:
+        search = FaultySearchProvider(provider=search, fault=fault)
+    if fault in MAP_FAULTS:
+        mapped = FaultyMapProvider(provider=mapped, fault=fault)
+    return Providers(llm=llm, search=search, map=mapped, weather=_build_weather(cfg))
 
 
 def _build_llm(settings: Settings) -> LlmProvider:
