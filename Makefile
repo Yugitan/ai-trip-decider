@@ -158,7 +158,10 @@ test-cov: ## 带覆盖率的测试（低于 COV_MIN 直接非零退出，默认 
 	cd $(BACKEND) && $(UV) run pytest --cov=app --cov-report=term-missing:skip-covered --cov-fail-under=$(COV_MIN) -q
 
 .PHONY: e2e
-e2e: ## Playwright 端到端测试
+e2e: ## Playwright 端到端测试（前冒烟：清限流计数器 + 自动拉起前后端）
+	@echo "▶ E2E 前置：Postgres 在跑且开发库已建库（make seed）；缺库时'至少 2 套方案'根本排不出来"
+	@psql -h $(PG_HOST) -p $(PG_PORT) -U $(PG_USER) -d $(DB_NAME) -c "DELETE FROM rate_limit_counters" >/dev/null 2>&1 \
+		|| echo "  ⚠︎ 限流计数器没清掉（继续跑，但可能被 429 挡住——那说明库/连接串不对）"
 	cd $(FRONTEND) && pnpm exec playwright test
 
 # ── 代码质量 ────────────────────────────────────────────────────────────────

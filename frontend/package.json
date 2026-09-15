@@ -10,7 +10,8 @@
     "format": "prettier --write \"app/**/*.{ts,tsx,css}\" \"components/**/*.{ts,tsx}\" \"lib/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "next": "15.5.25",
@@ -19,6 +20,7 @@
     "sharp": "^0.35.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "4.3.3",
     "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "6.9.1",
