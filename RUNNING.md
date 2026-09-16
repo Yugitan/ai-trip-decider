@@ -405,7 +405,7 @@ meta.llm = {
 | 可交互的路线导航图 | 结果页现在用的是**站点位置示意图**（编号标记 + 按顺序连线），不是能点开导航的路线图；方案之间的交叉对比已可用（卡片上方的对比表） |
 
 | 分享页的 OG 图 / JSON-LD | ✅ 已实现（2026-09-15，见 §8.10）：动态 OG 图 + `TouristTrip` JSON-LD |
-| `make e2e` | `frontend/` 下**没有** Playwright 依赖与配置（已确认目录里没有 `e2e/`、没有 playwright 配置），该目标会直接失败 |
+| `make e2e` | ✅ 已实现（2026-09-15 落地、**2026-09-16 第一次真跑**：19 passed）。它建立在 `frontend/e2e/`（6 个 spec）+ `playwright.config.ts`（桌面 chromium / Pixel 7 / iPhone 14）上 |
 
 > 首页那条「稳定 422」已于 2026-09-13 修好（§5.2），会话 cookie 被丢弃的问题已于 2026-09-14 修好（§8.6），
 > 所以「点提交 → 看进度 → 看这次模型做了什么 → 看到方案本身 → 改一改 / 撤销 / 分享出去」现在是**通的**；
@@ -430,7 +430,13 @@ make test              # 上面四层依次跑
 make test-cov          # 后端覆盖率闸门（实测 95.47%，低于 COV_MIN=93 直接非零退出）
 make test-frontend-cov # 前端覆盖率闸门（实测 statements 98.44% / branches 87.19%，阈值见 vitest.config.ts）
 make check             # ★ 提交前必跑：lint + typecheck + 前后端覆盖率闸门 + 测试（实测约 90 秒，exit=0）
+make e2e               # Playwright 端到端：实测 19 passed（约 53 秒，见 §8.15）
 ```
+
+`make e2e` **不在 `make check` 里**（真浏览器 + 真数据库，比前者慢一个量级），所以改了界面
+就单独跑一次 —— 它拦下过 `make check` 全绿但界面上根本点不动的那种问题。
+前置条件：Postgres 在跑、**开发库**已建库（`make seed`）、Playwright 的 chromium 已下载；
+已经在跑的 `make dev` 会被复用（`reuseExistingServer`），不会另起一份。
 
 单项筛选（改哪测哪）：
 
@@ -576,10 +582,12 @@ make format     # 自动格式化
 详见 §5.2。表单改为发送接口枚举值，并加了一条**跨语言契约测试**（前端测试直接读
 `config/scoring.yaml` 比对偏好键）；后端一字未改 —— 接口本来就应该只认枚举值。
 
-### 8.4 `make e2e` 会直接失败
+### 8.4 ✅ 已修复：`make e2e` 曾经会直接失败
 
-`frontend/` 下没有 Playwright 依赖、没有配置文件、也没有 `e2e/` 目录（已确认），
-端到端测试属于尚未开始的里程碑。
+当时 `frontend/` 下没有 Playwright 依赖、没有配置文件、也没有 `e2e/` 目录，
+这一栏属于尚未开始的里程碑。现在已有 19 条用例（`frontend/e2e/`）并全绿。
+第一次真跑时它当场揪出两条 `make check` 拦不住的缺陷（radio 被 `sr-only` 的写法挡住点不动、
+「需要留意」把同一句话重复三遍 —— 见 §8.15），所以它现在不是"花瓶闸门"。
 
 ### 8.6 ✅ 已修复：跨站页面下会话 cookie 被浏览器丢弃（点「开始规划」看不到任何路线）
 
@@ -934,6 +942,26 @@ make check      # 那几条秒级的性能门槛已经在这里面（不必等 p
 ```bash
 cd backend && uv run pytest tests/integration/test_multi_day.py -q
 ```
+
+### 8.15 `make e2e`：第一次真跑（2026-09-16）
+
+```bash
+make e2e    # 实测 19 passed / 52.8s（6 个 spec × 3 个 project，串行 1 worker）
+```
+
+改完表单/结果页就该跑一次：它比 `make check` 慢，但**看得见的东西它才管**。
+这一轮它当场拦下两条 `make check` 全绿也发现不了的问题：
+
+| 现象 | 真正的原因 | 修法 |
+| --- | --- | --- |
+| `E2E-03` 选「半天」时报 `intercepts pointer events`，点不动 | `Segmented` 的 radio 真身是 `sr-only`（1px、被裁剪），Playwright 的 `.check()` 去点的是它，上面盖着 `<label>`。之前偶尔能过，只因为选的是**默认值**（`check()` 对已选中元素是空操作） | `e2e/helpers.ts` 新增 `chooseSegment()`：点**可见的胶囊**（用户真实动作），不再碰隐藏 input |
+| `E2E-14` console 不干净：React 报 duplicate key | 「需要留意」是 `_cons` 取告警前 3 条的**句子原文**，而营业时间类告警是**按站点**产生的、文案不带站名 —— 三站都不填日期就是三句一字不差的话；前端列表以句子为 key | `_cons` 去重后再取 3 条（见 TASKS.md 第 95 条，单测钉住） |
+
+> ⚠️ 重跑前必须清一次 `plan_cache`（改了规划输出的话）：
+> `psql -d tripdecider_dev -c "DELETE FROM plan_cache"`。
+> 它的键是 `(params_hash, kb_version)`——**不含代码版本**，所以旧行程会被继续复用。
+> 反过来，别把清缓存加进 `make e2e`：套件靠复用缓存躲开"每 IP 每天 5 次冷规划"的限流
+> （`playwright.config.ts` 只清限流计数器，缓存命中不计额度）。
 
 ### 8.13 试用时觉得哪个数字不真实，先来这张表定位（2026-09-16）
 

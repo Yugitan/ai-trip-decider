@@ -17,6 +17,9 @@ import { expect, type Page } from "@playwright/test";
 export const DEFAULT_PAYLOAD = {
   city: "guangzhou",
   days: 1,
+  // 「玩几天」与「每天玩多久」是两个控件，各有一个默认值；漏掉任何一个，
+  // 这份"默认表单长什么样"的记录就不再等于用户真的交上去的东西。
+  day_span: "full_day",
   people: 2,
   preferences: [],
   pace: "relaxed",
@@ -76,4 +79,24 @@ export async function currentTripPath(page: Page): Promise<string> {
 /** 方案卡片（`trip-route-A/B/C`）。 */
 export function routeCards(page: Page) {
   return page.locator("[data-testid^='trip-route-']");
+}
+
+/**
+ * 选一个分段控件（`ui/segmented.tsx`：天数 / 每天玩多久 / 节奏 / 预算口径）。
+ *
+ * ★ 为什么不是 `getByRole("radio").check()` ★
+ * radio 的真身是 `sr-only`（1px、被裁剪），上面盖着 `<label>`，Playwright 去点那个
+ * **看不见的 input** 时会被 label 拦下（`intercepts pointer events`），偶尔还能过的唯一
+ * 原因是默认值已经选中 —— `check()` 对已选中的元素是空操作，根本不点。换个值就必挂。
+ * 用户真实做的是点那枚胶囊，所以这里点的是该分组里**可见**的那段文字。
+ */
+export async function chooseSegment(
+  page: Page,
+  legend: string,
+  label: string,
+): Promise<void> {
+  await page
+    .getByRole("group", { name: legend })
+    .getByText(label, { exact: true })
+    .click();
 }

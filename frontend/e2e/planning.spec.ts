@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { planWithDefaults, routeCards, trackPageErrors } from "./helpers";
+import { chooseSegment, planWithDefaults, routeCards, trackPageErrors } from "./helpers";
 
 /**
  * 规划与结果页：E2E-02 提交 → E2E-03 完整输入 → E2E-04 至少 2 套方案
@@ -29,16 +29,16 @@ test("E2E-02 默认值提交：内嵌结果出现，且这一版有自己的固�
 test("E2E-03 完整输入提交：发出的 payload 是接口取值，不是界面中文", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("radio", { name: "1 天" }).check();
+  await chooseSegment(page, "天数", "1 天");
   // 「玩几天」与「每天玩多久」是两个控件：只改其中一个时另一个保持默认，
   // 而两者都必须真的进 payload（否则界面上的选择会被静默丢弃）。
-  await page.getByRole("radio", { name: "半天" }).check();
+  await chooseSegment(page, "每天玩多久", "半天");
   await page.getByLabel("人数", { exact: true }).fill("2");
   // 偏好 chip 的真实 input 是 `sr-only`（视觉上是胶囊）—— 点 label 才是用户真正做的事，
   // 直接 .check() 会撞上"元素不可见/不稳定"（第一版就是这么挂的）
   await page.locator("label[for='planner-pref-美食']").click();
   await page.locator("label[for='planner-pref-拍照']").click();
-  await page.getByRole("radio", { name: "轻松" }).check();
+  await chooseSegment(page, "节奏", "轻松");
   await page.getByLabel("预算", { exact: true }).fill("300");
   await page.getByLabel("补充要求（可选）").fill("想吃早茶，走路别太多");
 

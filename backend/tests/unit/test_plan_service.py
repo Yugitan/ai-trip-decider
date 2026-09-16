@@ -14,10 +14,18 @@ import pytest
 
 from app.core.config import get_limits_config, get_scoring_config
 from app.core.errors import AppError, ErrorCode
-from app.domain.models import Constraint, Intent, ParseResult
+from app.domain.feasibility import FeasibilityReport, Violation
+from app.domain.models import Constraint, Intent, ParseResult, RoutePlan, route_metrics
 from app.domain.models import Place as DomainPlace
+from app.domain.scoring import ScoreBreakdown
 from app.schemas.trips import PlanRequest
-from app.services.plan_service import _stop_why, build_intent, intent_to_dict
+from app.services.plan_service import (
+    _cons,
+    _ScoredPlan,
+    _stop_why,
+    build_intent,
+    intent_to_dict,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -196,3 +204,65 @@ def test_stop_why_caps_the_badge_at_two_dimensions() -> None:
     )
     assert reason is not None
     assert reason.count("0.90") == 2
+
+
+# ── 「需要留意」（`_cons`）──────────────────────────────────────────────────
+#
+# `_cons` 只读 `report.warnings`，所以这里的假方案除了告警之外全是空壳。
+
+
+def _cons_plan(*messages: str) -> _ScoredPlan:
+    report = FeasibilityReport(
+        feasible=True,
+        violations=(),
+        warnings=tuple(
+            Violation(
+                code="HOURS_NOT_CHECKED",
+                severity="soft",
+                at_seq=index,
+                message=message,
+            )
+            for index, message in enumerate(messages, start=1)
+        ),
+        metrics=route_metrics(()),
+    )
+    return _ScoredPlan(
+        plan=RoutePlan(archetype="classic", stops=()),
+        archetype="classic",
+        report=report,
+        breakdown=ScoreBreakdown(
+            preference=0.0,
+            efficiency=0.0,
+            time_fit=0.0,
+            popularity=0.0,
+            budget_fit=0.0,
+            walking_fit=0.0,
+            place_relation=0.0,
+            m_diversity=0.0,
+            m_weather=0.0,
+            m_conflict=0.0,
+            weighted_sum=0.0,
+            total=0.0,
+        ),
+        source="generated",
+    )
+
+
+def test_cons_never_repeats_the_same_sentence() -> None:
+    """三个站点都没填出行日期，不能变成三条一模一样的「需要留意」。
+
+    营业时间提示是**按站点**逐条产生的，文案里不带站名（哪一站的信息在
+    `detail.place` 里），所以站点一多就必然重复。前端的列表以句子为 key，
+    重复句子会直接让 React 报 duplicate key。
+    """
+    line = "未指定出行日期，无法校验营业时间（景点常按周几闭馆）"
+    item = _cons_plan(line, line, line)
+
+    assert _cons(item) == [line]
+
+
+def test_cons_caps_at_three_distinct_lines() -> None:
+    """去重后再取 3 条：四条不同提示时给 3 条**不同**的，而不是重复 2 条。"""
+    item = _cons_plan("甲", "甲", "乙", "丙", "丁")
+
+    assert _cons(item) == ["甲", "乙", "丙"]

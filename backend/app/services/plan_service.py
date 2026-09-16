@@ -1673,7 +1673,15 @@ def _pros(item: _ScoredPlan) -> list[str]:
 
 
 def _cons(item: _ScoredPlan) -> list[str]:
-    return [warning.message for warning in item.report.warnings[:3]]
+    """「需要留意」取前 3 条**互不相同**的提示。
+
+    ★ 为什么必须去重 ★ 营业时间类提示是**按站点**逐条产生的：三个站点都没填
+    出行日期时会产生三条**文本完全一样**的告警（区分哪一站的信息在 ``detail.place``
+    里，不在这句话里）。于是「需要留意」会把同一句话列三遍 —— 那不是三条提醒，
+    而且前端列表以句子为 key，重复句子会让 React 报 duplicate key
+    （E2E-14 就是这么红起来的）。去重后还能多留一条不同的信息。
+    """
+    return list(dict.fromkeys(warning.message for warning in item.report.warnings))[:3]
 
 
 def _reason(item: _ScoredPlan) -> str:
