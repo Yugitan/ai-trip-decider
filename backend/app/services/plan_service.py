@@ -880,7 +880,7 @@ class PlanService:
         stops: list[Stop] = []
         arrive = intent.start_min
         for index, place in enumerate(ordered):
-            stay = stays.get(place.id) or stay_duration_min(place)
+            stay = stays.get(place.id) or stay_duration_min(place, intent.pace, limits=self.limits)
             stop = Stop(place=place, arrive_min=arrive, stay_min=stay)
             stops.append(stop)
             if index < len(ordered) - 1:
@@ -1130,6 +1130,11 @@ class PlanService:
                     # 预算的"未知项"不在可行性报告里，但它同样必须能被前端读到：
                     # 只显示一个总额、把"有项目根本没算进去"藏起来，等于编造低预算。
                     "budget_unknown_items": list(item.plan.budget.unknown_items) if item.plan.budget else [],
+                    # 估算项与未知项**分开**落库：「我猜了、并告诉你猜的什么」
+                    # 与「我没算」是两件事，混在一个列表里前端就只能说一句含糊的话。
+                    "budget_estimated_items": (
+                        list(item.plan.budget.estimated_items) if item.plan.budget else []
+                    ),
                     "budget_estimated": item.plan.budget.estimated if item.plan.budget else True,
                 },
                 route_source=item.source,
@@ -1323,20 +1328,40 @@ def _snapshot_of(place: DomainPlace) -> dict[str, Any]:
 
 
 def _stop_why(place: DomainPlace, intent: Intent, scoring: ScoringConfig) -> str | None:
-    """这一站为什么被推荐：命中阈值以上的偏好维度（数据推导，不编造理由）。"""
+    """这一站为什么被推荐：命中的偏好维度 + **分值** + 地点自己的标签。
+
+    只写一个「美食」是在复述用户自己勾的偏好：同一趟里两座茶楼的徽章一模一样，
+    读者既无法核验也无法区分，这就是「文案空泛」的来源。所以：
+
+    - 每一维带上库里算出的分值（``food_score``…，可回溯到 enrichment 的 tag_signals）；
+    - 再补地点自己的 ``tags``（来自 OSM/策展数据，不是我们现编的形容词），
+      并滤掉与维度标签重复的词（"美食" 既是标签又常常是 tag）；
+    - 按分值降序取前两位，徽章宽度有限，也不能只剩一个"更多"。
+    """
     active = intent.active_preferences
     if not active:
         return None
     threshold = scoring.formulas.preference.coverage_min_dim_score
     unknown = scoring.formulas.preference.unknown_score_default
-    hit: list[str] = []
+
+    scored: list[tuple[float, str]] = []
     for key, weight in active.items():
         dimension = scoring.preference_dimensions.get(key)
         if dimension is None or weight <= 0:
             continue
-        if dimension_score(place, key, dimension, unknown) >= threshold:
-            hit.append(str(dimension.label))
-    return "·".join(hit) if hit else None
+        value = dimension_score(place, key, dimension, unknown)
+        if value >= threshold:
+            scored.append((value, str(dimension.label)))
+    if not scored:
+        return None
+
+    # 降序取前两名；同分按标签排序，保证同一输入永远得到同一行文案。
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    labels = {label for _, label in scored}
+    headline = "·".join(f"{label} {value:.2f}" for value, label in scored[:2])
+
+    extra = [tag for tag in place.tags if tag not in labels]
+    return f"{headline} · {'/'.join(extra[:2])}" if extra else headline
 
 
 def _route_name(item: _ScoredPlan) -> str:

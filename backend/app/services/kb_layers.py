@@ -20,10 +20,11 @@
     若将来热门地点变成独立数据（例如运营榜单、季节活动），再在这里补上真实实现。
 
 ★ 诚实性红线 ★
-    ``places.opening_hours``（结构化营业时间）在 M1 里是**刻意留空**的
-    （见 TASKS.md B6：原文存在 ``opening_hours_raw``，解析器尚未落地）。
-    因此这里**不猜** jsonb 的形状，一律映射为"未知" —— 领域层会据此报
-    HOURS_UNKNOWN 警告，而不是假装"24 小时开放"。
+    营业时间由 ``app/domain/opening_hours.py`` 从 OSM 原文（``opening_hours_raw``）
+    即时解析（TASKS.md B6）。解析器**看不懂就返回 None**，这时领域层会报
+    HOURS_UNKNOWN（"出发前请确认"），而不是假装"24 小时开放"，也不会给它
+    编一个看起来精确的时间。库里 509 条原文能解出 267 条（52.5%），
+    剩下的多半是跨零点（``05:56-00:25``）或脏数据（``06:06-24:08``）—— 如实留白。
 """
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ from app.core.errors import AppError, ErrorCode
 from app.db.models import City, KbVersion, Place, PlaceRelation, Route, RoutePlace
 from app.domain.models import Place as DomainPlace
 from app.domain.models import Relation, TransportMode, TransportSource
+from app.domain.opening_hours import parse_opening_hours
 from app.services.retrieval_chain import FunctionLayer, RetrievalQuery, RetrievalResult
 
 __all__ = [
@@ -147,8 +149,12 @@ def to_domain_place(row: Place, scoring: ScoringConfig) -> DomainPlace:
         scores=scores,
         price_min=_money(row.price_min),
         price_max=_money(row.price_max),
-        # 结构化营业时间尚未落地（TASKS.md B6）→ 一律"未知"，不猜 jsonb 形状
-        opening_hours=None,
+        # 营业时间：由 OSM 原文（`opening_hours_raw`）**即时解析**成结构化时段。
+        # 解析器只做能保证正确的那一部分，看不懂就是 None → 仍然"未知"，
+        # 前端会带上一句"出发前请确认"（一个猜错的开放时间比未知更危险）。
+        # 为什么不落库到 `opening_hours` 列：解析只有一份实现，原文才是权威；
+        # 3166 个地点全量解析实测 1.4ms，不值得为它多一条会漂的副本。
+        opening_hours=parse_opening_hours(row.opening_hours_raw),
         indoor=row.indoor,
         rainy_day_score=float(row.rainy_day_score) if row.rainy_day_score is not None else None,
         tags=tuple(row.tags or ()),

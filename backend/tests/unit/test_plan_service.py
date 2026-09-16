@@ -15,8 +15,9 @@ import pytest
 from app.core.config import get_limits_config, get_scoring_config
 from app.core.errors import AppError, ErrorCode
 from app.domain.models import Constraint, Intent, ParseResult
+from app.domain.models import Place as DomainPlace
 from app.schemas.trips import PlanRequest
-from app.services.plan_service import build_intent, intent_to_dict
+from app.services.plan_service import _stop_why, build_intent, intent_to_dict
 
 pytestmark = pytest.mark.unit
 
@@ -122,3 +123,76 @@ def test_intent_to_dict_is_json_serialisable_shape() -> None:
 def test_intent_to_dict_handles_unlimited_budget() -> None:
     intent, _, _ = _build(budget=None)
     assert intent_to_dict(intent)["budget"]["amount"] is None
+
+
+# ── 「为什么推荐这一站」────────────────────────────────────────────────────
+#
+# 守的是"文案不空泛"的可核验版本：一个只写「美食」的徽章是**用户自己勾的偏好**
+# 的复述 —— 同一趟里两座茶楼会长得一模一样。所以文案里必须出现可回溯的数据。
+
+
+def _domain_place(*, scores: dict[str, float | None], tags: tuple[str, ...]) -> DomainPlace:
+    return DomainPlace(
+        id="p1",
+        name="测试茶楼",
+        category="food",
+        lat=23.1,
+        lng=113.2,
+        scores=scores,
+        tags=tags,
+    )
+
+
+def _why(scores: dict[str, float | None], tags: tuple[str, ...], **overrides: object) -> str | None:
+    intent, _, _ = _build(**{"preferences": ["food"], **overrides})
+    return _stop_why(_domain_place(scores=scores, tags=tags), intent, get_scoring_config())
+
+
+def test_stop_why_carries_the_score_not_just_the_label() -> None:
+    reason = _why({"food": 0.9}, ("美食", "早茶"))
+    assert reason is not None
+    assert "美食" in reason and "0.90" in reason, "分值必须写出来，否则理由无法核验"
+    # 与维度标签重复的 tag 不得再出现一次（"美食 0.90 · 美食" 是纯噪音）
+    assert reason.count("美食") == 1
+    assert "早茶" in reason, "地点自己的标签才是区分两座茶楼的东西"
+
+
+def test_stop_why_distinguishes_two_places_with_the_same_label() -> None:
+    strong = _why({"food": 0.9}, ("美食", "早茶", "老字号"))
+    weak = _why({"food": 0.65}, ("美食",))
+    assert strong != weak
+
+
+def test_stop_why_is_none_below_threshold() -> None:
+    threshold = get_scoring_config().formulas.preference.coverage_min_dim_score
+    assert _why({"food": threshold - 0.01}, ("美食",)) is None
+
+
+def test_stop_why_is_none_without_preferences() -> None:
+    intent, _, _ = _build()
+    assert _stop_why(_domain_place(scores={"food": 0.9}, tags=()), intent, get_scoring_config()) is None
+
+
+def test_stop_why_has_no_trailing_separator() -> None:
+    """没有可用 tag 时不能留下尾随的 " · "（在浅色徽章里是一道明显的黑点）。"""
+    reason = _why({"food": 0.9}, ("美食",))
+    assert reason is not None and not reason.endswith("·")
+
+
+def test_stop_why_orders_by_score_and_is_deterministic() -> None:
+    """多个维度都命中时，最强的排前面；同分时顺序固定（同一输入同一文案）。"""
+    first = _why({"food": 0.7, "photo": 0.95}, (), preferences=["food", "photo"])
+    second = _why({"food": 0.7, "photo": 0.95}, (), preferences=["photo", "food"])
+    assert first == second
+    assert first is not None and first.index("拍照") < first.index("美食")
+
+
+def test_stop_why_caps_the_badge_at_two_dimensions() -> None:
+    """徽章是一行的：命中五个维度也不能把它写成一段话。"""
+    reason = _why(
+        {"food": 0.9, "photo": 0.9, "culture": 0.9, "shopping": 0.9},
+        (),
+        preferences=["food", "photo", "culture", "shopping"],
+    )
+    assert reason is not None
+    assert reason.count("0.90") == 2

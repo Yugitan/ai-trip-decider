@@ -4,12 +4,21 @@
 
 1. **已知价格**：地点的 ``price_min/price_max``（有来源的门票/人均）。
 2. **估算价格**：餐费与交通费，单价来自 ``config/limits.yaml`` 的可审计假设
-   （早茶 ¥30 / 午餐 ¥60 / 晚餐 ¥80，地铁 ¥4…），结果一律标记 ``estimated``。
+   （早茶 ¥30 / 午餐 ¥60 / 晚餐 ¥80，地铁 ¥4…），结果一律标记 ``estimated``
+   并逐项记进 ``estimated_items``。
 3. **未知价格**：地点没有 ``price_*`` 字段。这种情况**不计入金额**，而是记进
    ``unknown_items`` —— 按 0 元计会让预算看起来比实际低，等于变相编造。
 
+★ 餐饮站点的价格未知时走估算，不是走"不计入" ★
+    全库如今 **0 条地点有价格**（TASKS.md B5），若"靠餐饮站点覆盖的餐次"因为
+    该站点没价格而整笔不计，一条两顾老字号的路线会报出 `¥19.59/人` —— 而它的
+    19.59 全是那段打车费。那不是"保守"，是**一个看起来像预算的假数**：读者
+    会以为这顿饭不要钱。所以：有餐饮站点但没价格 → 用配置里的餐费单价推定
+    （与交通费同一个等级的可审计假设），并在 ``estimated_items`` 里指名道姓。
+
 MVP 没有可靠的餐饮/门票价格来源（见 TASKS.md B5），所以预算整体是"量级参考"，
-不是报价。宁可留空，不可编造。
+不是报价。宁可留空，不可编造 —— 但"留空"指的是**拿不到就不编数字**，
+不是把明知会发生的一顿饭（有数据、有假设）从总额里静默地抹掉。
 """
 
 from __future__ import annotations
@@ -118,7 +127,8 @@ def estimate_route_budget(
     计量口径：
     - 门票：非餐饮类地点按 ``price_min/price_max``；缺失 → 计入 unknown，不按 0 算。
     - 餐饮：行程覆盖到的餐次各算一次。若该餐次时段内**有**餐饮类站点，
-      则用该站点的价格（缺失 → unknown）；否则用配置里的餐费估算值。
+      则用该站点的价格；该站点也没有价格时用**配置里的餐费单价**推定并记进
+      ``estimated_items``（不整笔不计 —— 理由见模块头）。
     - 交通：按段计费（见 :func:`estimate_leg_cost`）。
     """
     if not stops:
@@ -133,6 +143,7 @@ def estimate_route_budget(
     min_cny = Decimal("0")
     max_cny = Decimal("0")
     unknown: list[str] = []
+    estimated_items: list[str] = []
     estimated = False
 
     # ── 门票 ──
@@ -147,32 +158,52 @@ def estimate_route_budget(
         max_cny += price_max if price_max is not None else (price_min or Decimal("0"))
 
     # ── 餐饮 ──
+    # 被某个餐次"吃掉"的餐饮站点，不再在下面重复计入"消费未知"：
+    # 它的花费已经通过那个餐次（真实价格或配置单价）算过了。
+    costed_stops: set[int] = set()
     route_start, route_end = stops[0].arrive_min, stops[-1].depart_min
     for slot in meal_slots(limits):
         if not slot.overlaps(route_start, route_end):
             continue
         meal_stop = next(
             (
-                stop
-                for stop in stops
+                (index, stop)
+                for index, stop in enumerate(stops)
                 if stop.place.category in REST_CATEGORIES
                 and slot.overlaps(stop.arrive_min, stop.depart_min)
             ),
             None,
         )
-        if meal_stop is None:
-            # 行程跨过了饭点却没有餐饮站点 —— 按配置估价补一笔，并标记 estimated。
-            cost = Decimal(str(limits.meal_cost_cny.get(slot.name, 0)))
-            min_cny += cost
-            max_cny += cost
-            estimated = True
+        meal_price_min: Decimal | None = None
+        meal_price_max: Decimal | None = None
+        if meal_stop is not None:
+            costed_stops.add(meal_stop[0])
+            meal_price_min = meal_stop[1].place.price_min
+            meal_price_max = meal_stop[1].place.price_max
+
+        if meal_stop is not None and (meal_price_min is not None or meal_price_max is not None):
+            min_cny += meal_price_min if meal_price_min is not None else (meal_price_max or Decimal("0"))
+            max_cny += meal_price_max if meal_price_max is not None else (meal_price_min or Decimal("0"))
             continue
-        price_min, price_max = meal_stop.place.price_min, meal_stop.place.price_max
-        if price_min is None and price_max is None:
-            unknown.append(f"{meal_stop.place.name}·{slot.name}")
+
+        # 走到这里有两种情况，**都**用配置里的餐费单价推定：
+        # （a）跨了饭点却没有餐饮站点（去别处吃了、或候选里没有餐馆）；
+        # （b）有餐饮站点、但它没有价格 —— 不能因此把这顿饭从总额里抹掉。
+        cost = Decimal(str(limits.meal_cost_cny.get(slot.name, 0)))
+        min_cny += cost
+        max_cny += cost
+        estimated = True
+        where = meal_stop[1].place.name if meal_stop is not None else "该时段无餐饮站点"
+        estimated_items.append(f"{where}·{slot.name}")
+
+    # ── 餐饮站点里没被任何餐次计过的那些 ──
+    # 小吃/咖啡不按时间猜（见 limits.yaml），但"没价格"这件事必须说出来：
+    # 否则它在界面上是不存在的，预算看起来就像已经把甜品钱算进去了。
+    for index, stop in enumerate(stops):
+        if index in costed_stops or stop.place.category not in REST_CATEGORIES:
             continue
-        min_cny += price_min if price_min is not None else (price_max or Decimal("0"))
-        max_cny += price_max if price_max is not None else (price_min or Decimal("0"))
+        if stop.place.price_min is None and stop.place.price_max is None:
+            unknown.append(f"{stop.place.name}·消费")
 
     # ── 交通 ──
     for stop in stops:
@@ -190,6 +221,7 @@ def estimate_route_budget(
         min_cny=to_total(_money(min_cny), "per_person", people) if scope == "total" else _money(min_cny),
         max_cny=to_total(_money(max_cny), "per_person", people) if scope == "total" else _money(max_cny),
         unknown_items=tuple(unknown),
+        estimated_items=tuple(estimated_items),
         estimated=estimated,
         scope=scope,
     )

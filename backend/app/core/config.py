@@ -470,9 +470,15 @@ class PlanningLimits(BaseModel):
     single_leg_transit_prune_min: int
     last_entry_buffer_min: int
     min_stop_duration_min: int
+    #: 节奏 → 停留时长系数。缺省 1.0 只是为了向后兼容旧配置；
+    #: 生产配置必须显式给出三档，否则 pace 会退化成"只影响步行上限"。
+    stay_scale_by_pace: dict[str, float] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _consistency(self) -> PlanningLimits:
+        for pace, scale in self.stay_scale_by_pace.items():
+            if scale <= 0:
+                raise ValueError(f"planning.stay_scale_by_pace.{pace} 必须为正数（停留时长系数）")
         if self.candidate_min >= self.candidate_max:
             raise ValueError("planning.candidate_min 必须小于 candidate_max")
         if self.single_leg_transit_warn_min >= self.single_leg_transit_prune_min:

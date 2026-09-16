@@ -36,7 +36,7 @@ import sys
 import time
 import uuid
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -159,7 +159,7 @@ def count_eligible_pairs(
 
     为什么必须单独记它：早期报告里只有 `osrm_pairs`，读者无法分辨"这对是跳批次"
     还是"OSRM 挂了/失败了" —— 实测一次重算从 163 变成 161（地点集合变了，
-    于是按 UUID 排序后的分批边界也变了），而报告里 **看不出** 是哪种原因。
+    分批边界也跟着变），而报告里 **看不出** 是哪种原因。
     """
     eligible = 0
     for a, b in pairs:
@@ -168,6 +168,77 @@ def count_eligible_pairs(
         if index is not None and index == chunk_of.get(b):
             eligible += 1
     return eligible
+
+
+def zorder_key(place: Place) -> tuple[float, float, uuid.UUID]:
+    """按地理顺序（粗网格）排地点，只用于让分批"补齐"时仍然地缘相邻。"""
+    return (round(place.latitude, 2), round(place.longitude, 2), place.id)
+
+
+def cluster_batches(
+    nodes: Sequence[uuid.UUID],
+    pairs: Iterable[tuple[uuid.UUID, uuid.UUID]],
+    batch_size: int,
+) -> dict[uuid.UUID, int]:
+    """把地点分批，使**尽可能多的候选对落在同一批内**。
+
+    为什么必须这么做：``batch_size``（默认 25）是 OSRM table 接口的节点上限，
+    一批只能算批**内部**的矩阵。早期实现按 UUID 排序切连续块，而 UUID 是新生成的
+    主键、与地理位置毫无关系 —— 实测 5445 对候选里只有 130 对（2.4%）落进同批，
+    于是结果页上几乎每一段通勤都是 `source = estimated`（「直线距离 × 速度假设」），
+    这正是"通勤耗时看起来不真实"的根源。
+
+    修法不需要改 OSRM 接口，也不用调 batch_size，只要把地理上挨着的点分到同一批：
+
+      1. 贪心图聚类：每批从"度数最高"的未分配点开始（高度节点聚合得好，
+         否则贪心会把它们留到最后变成一堆孤岛）；
+      2. 反复挑"与当前批内节点连接最多"的邻居加入，直到满批。计数是增量的，
+         整体是 O(E) 而不是每轮重算一遍邻接交集；
+      3. 连接耗尽但批还没满时，按 ``nodes`` 的顺序（调用方传地理序）补齐 ——
+         空着的槽位不产生覆盖，不能浪费。
+
+    ``nodes`` 的顺序是**唯一**的影响因素之一（另一个是图结构），同分一律按它
+    决定先后，所以同一份输入永远得到同一批划分。
+    """
+    if batch_size < 2:
+        raise ValueError("batch_size 至少为 2，否则一批里连一对都放不下")
+
+    order = {node: index for index, node in enumerate(nodes)}
+    adjacency: dict[uuid.UUID, set[uuid.UUID]] = {node: set() for node in nodes}
+    for a, b in pairs:
+        if a == b or a not in adjacency or b not in adjacency:
+            continue
+        adjacency[a].add(b)
+        adjacency[b].add(a)
+
+    unassigned = set(adjacency)
+    chunk_of: dict[uuid.UUID, int] = {}
+    batch_index = 0
+    while unassigned:
+        counter: dict[uuid.UUID, int] = defaultdict(int)
+        candidates: set[uuid.UUID] = set()
+        cluster: list[uuid.UUID] = []
+        chosen: uuid.UUID | None = min(unassigned, key=lambda n: (-len(adjacency[n]), order[n]))
+        while len(cluster) < batch_size:
+            if chosen is None:
+                if candidates:
+                    chosen = min(candidates, key=lambda n: (-counter[n], order[n]))
+                elif unassigned:
+                    # 批内已无相邻候选：按地理序补位，批次仍然地缘相邻
+                    chosen = min(unassigned, key=lambda n: order[n])
+                else:
+                    break
+            unassigned.discard(chosen)
+            candidates.discard(chosen)
+            for neighbor in adjacency[chosen] & unassigned:
+                counter[neighbor] += 1
+                candidates.add(neighbor)
+            cluster.append(chosen)
+            chosen = None
+        for node in cluster:
+            chunk_of[node] = batch_index
+        batch_index += 1
+    return chunk_of
 
 
 def recommend_transport(distance_m: float) -> str:
@@ -287,8 +358,14 @@ async def build_relations(*, use_osrm: bool, max_places: int, neighbors: int) ->
         stats["batch_size"] = graph_limits.batch_size
         if use_osrm:
             batch = graph_limits.batch_size
-            unique_ids: list[uuid.UUID] = sorted({pid for pair in pairs for pid in pair})
-            chunk_of: dict[uuid.UUID, int] = {}
+            # 分批顺序用**地理序**（而不是 UUID 序），并用图聚类让候选对尽量同批 ——
+            # 理由见 cluster_batches 的 docstring：UUID 序与地理位置无关，
+            # 实测只有 2.4% 的候选对能拿到真实路网距离。
+            unique_ids: list[uuid.UUID] = sorted(
+                {pid for pair in pairs for pid in pair}, key=lambda pid: zorder_key(by_id[pid])
+            )
+            chunk_of = cluster_batches(unique_ids, pairs, batch)
+            batch_count = max(chunk_of.values(), default=-1) + 1
             batches_ok = 0
             batches_failed = 0
             transport = httpx.AsyncClient(
@@ -296,12 +373,8 @@ async def build_relations(*, use_osrm: bool, max_places: int, neighbors: int) ->
                 headers={"User-Agent": settings.nominatim_user_agent},
             )
             async with transport as client:
-                for start in range(0, len(unique_ids), batch):
-                    chunk = unique_ids[start : start + batch]
-                    # 先登记"这个点在第几批"，失败也不例外 —— 否则那一批的点会
-                    # 被当成"没分过批"，报告里的结构性上限就少算了。
-                    for pid in chunk:
-                        chunk_of[pid] = start // batch
+                for batch_index in range(batch_count):
+                    chunk = [pid for pid in unique_ids if chunk_of[pid] == batch_index]
                     coords = [(by_id[pid].latitude, by_id[pid].longitude) for pid in chunk]
                     try:
                         # fetch_osrm_distances 返回的是"矩阵下标对 → 米"，
@@ -310,7 +383,7 @@ async def build_relations(*, use_osrm: bool, max_places: int, neighbors: int) ->
                         batches_ok += 1
                     except Exception as exc:  # 单个批次失败不影响整体，该批退回估算
                         batches_failed += 1
-                        print(f"    ⚠︎ OSRM 批次 {start // batch + 1} 失败（{type(exc).__name__}），该批退回估算")
+                        print(f"    ⚠︎ OSRM 批次 {batch_index + 1} 失败（{type(exc).__name__}），该批退回估算")
                         continue
                     for (row, col), meters in raw_matrix.items():
                         low, high = sorted((chunk[row], chunk[col]))
@@ -321,6 +394,7 @@ async def build_relations(*, use_osrm: bool, max_places: int, neighbors: int) ->
             # 结果打印出 -1155 这种负数，明显是错的统计口径。
             osrm_pair_count = sum(1 for pair in pairs if pair in osrm_matrix)
             eligible = count_eligible_pairs(pairs, chunk_of)
+            stats["osrm_batches"] = batch_count
             stats["osrm_pairs"] = osrm_pair_count
             stats["estimated_pairs"] = len(pairs) - osrm_pair_count
             stats["osrm_eligible_pairs"] = eligible
@@ -337,6 +411,8 @@ async def build_relations(*, use_osrm: bool, max_places: int, neighbors: int) ->
                 f"OSRM 的 table 接口一次只算一批（batch_size={batch}）内部的矩阵，"
                 f"所以只有同批的 {eligible} 对**可能**拿到真实路网距离；实际拿到 {osrm_pair_count} 对（{gap_note}），"
                 f"其余 {len(pairs) - eligible} 对跳批次，按设计退回估算。"
+                f"分批不是按 UUID 切的（那与地理位置无关，实测只有 2.4% 的候选对能同批），"
+                f"而是按候选关系图做贪心聚类（cluster_batches）：先把相互邻近的点捏进同一批。"
                 f"这与“公共 OSRM 可以用多久”无关：coverage 的上限就是分批结构。"
             )
 

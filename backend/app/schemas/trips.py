@@ -129,7 +129,10 @@ class TripRouteOut(BaseModel):
     budget_scope: str | None = None
     #: 费用含有估算值/未知项时前端必须如实标注
     budget_estimated: bool = True
+    #: 没有价格的项（金额里**没有**计入它们）
     budget_unknown_items: list[str] = Field(default_factory=list)
+    #: 金额里计入了、但单价来自 config 假设的项（与上一项相反：**算进去了**）
+    budget_estimated_items: list[str] = Field(default_factory=list)
     recommend_score: float
     score_breakdown: dict[str, Any] = Field(default_factory=dict)
     feasibility: dict[str, Any] = Field(default_factory=dict)

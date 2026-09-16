@@ -11,8 +11,8 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
-from app.core.config import LimitsConfig, ScoringConfig, get_seed_config
-from app.domain.models import Constraint, Intent, Place
+from app.core.config import LimitsConfig, ScoringConfig, get_limits_config, get_seed_config
+from app.domain.models import Constraint, Intent, Pace, Place
 from app.domain.scoring import dimension_score
 
 __all__ = [
@@ -38,12 +38,27 @@ class CandidateSet:
     relaxed_reasons: tuple[str, ...] = ()
 
 
-def stay_duration_min(place: Place) -> int:
-    """推荐停留时长：地点自身字段 > 类别基线 > 兜底 60 分钟。"""
+def stay_duration_min(
+    place: Place, pace: Pace = "balanced", *, limits: LimitsConfig | None = None
+) -> int:
+    """推荐停留时长：地点自身字段 > 类别基线 > 兜底 60 分钟，再按节奏缩放。
+
+    为什么节奏必须进来：``pace`` 如果只改步行上限，同一题面选「轻松」和「紧凑」
+    排出的**站点与停留完全一致**，只有步行距离不同 —— 那不是两种节奏，是同一趟
+    行程换了个标签。慢节奏的真实含义是**待得久、走得少**。
+
+    缩放后按 5 分钟取整（一个"87 分钟"的停留时间是假精度，读者会觉得是实测值），
+    并不低于 ``planning.min_stop_duration_min``：再短就不值得为它排一个站。
+    """
     if place.recommended_duration_min is not None and place.recommended_duration_min > 0:
-        return place.recommended_duration_min
-    bases = get_seed_config().duration_bases
-    return bases.get(place.category, 60)
+        base = place.recommended_duration_min
+    else:
+        base = get_seed_config().duration_bases.get(place.category, 60)
+
+    cfg = limits or get_limits_config()
+    scale = cfg.planning.stay_scale_by_pace.get(pace, 1.0)
+    scaled = round(base * scale / 5) * 5
+    return max(cfg.planning.min_stop_duration_min, int(scaled))
 
 
 def select_candidates(

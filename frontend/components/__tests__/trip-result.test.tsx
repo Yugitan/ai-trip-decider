@@ -38,7 +38,10 @@ const FULL_ROUTE: TripRoute = {
   budget_max: "18.32",
   budget_scope: "per_person",
   budget_estimated: true,
-  budget_unknown_items: ["点都德·breakfast", "惠食佳·lunch"],
+  // 未知项（没算进金额）与估算项（算进去了、单价是假设）是**相反**的两类，
+  // 所以它们的取值故意取成对得上的两个场景：商场没价格、茶楼餐费用配置单价推定。
+  budget_unknown_items: ["光明广场·消费"],
+  budget_estimated_items: ["点都德·breakfast", "惠食佳·lunch"],
   recommend_score: 0.97,
   feasibility: {
     feasible: true,
@@ -208,9 +211,8 @@ describe("TripResultView", () => {
     expect(within(card).getByText("（估算值）")).toBeInTheDocument();
     expect(within(card).getByText(/¥18.32\/人/)).toBeInTheDocument();
     expect(within(card).getByText("（估算）")).toBeInTheDocument();
-    expect(
-      within(card).getByText(/未含价格：点都德·breakfast、惠食佳·lunch/),
-    ).toBeInTheDocument();
+    expect(within(card).getByText(/未含价格：光明广场·消费/)).toBeInTheDocument();
+    expect(within(card).getByText(/含估算：点都德·breakfast、惠食佳·lunch/)).toBeInTheDocument();
     expect(within(card).getByText("预算含估算值")).toBeInTheDocument();
     expect(within(card).getByText(/适合：轻松 · 不想多走路/)).toBeInTheDocument();
     expect(within(card).getByText(/优点 · 路线效率/)).toBeInTheDocument();

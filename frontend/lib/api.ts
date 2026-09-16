@@ -288,7 +288,8 @@ export function planTrip(payload: PlanRequest): Promise<ApiResult<{ request_id: 
  *
  * 与后端 `app/schemas/trips.py` 的 `TripOut` / `TripRouteOut` / `TripStopOut` 一一对应。
  * 几个**刻意保留的不确定性字段**（界面的诚实性就靠它们，客户端不得当作可省略的装饰）：
- * - `budget_estimated` / `budget_unknown_items`：金额里有多少是估算、哪些项根本没价格；
+ * - `budget_estimated` / `budget_unknown_items` / `budget_estimated_items`：
+ *   金额里有多少是估算、哪些项**没算进去**（未知）、哪些项**算进去了但单价是假设**；
  * - `transport_source`（`amap` / `osrm` / `estimated` / `manual`）：这趟交通是实测还是估算；
  * - `feasibility.violations` / `warnings`：可行性校验的硬性失败与软性提醒；
  * - `route_count_note`：少于 3 套方案时**为什么**少，而不是凑数。
@@ -354,7 +355,10 @@ export interface TripRoute {
   budget_max: string | null;
   budget_scope: string | null;
   budget_estimated?: boolean;
+  /** 没有价格、**没有**计入金额的项 */
   budget_unknown_items?: string[];
+  /** 已计入金额、但单价来自 config 假设的项（与上一项相反） */
+  budget_estimated_items?: string[];
   recommend_score: number;
   score_breakdown?: Record<string, unknown>;
   feasibility?: TripFeasibility;

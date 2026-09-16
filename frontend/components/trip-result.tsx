@@ -119,6 +119,9 @@ export function TripRouteCard({ route }: { route: TripRoute }) {
     (warning) => warning.at_seq === null || warning.at_seq === undefined,
   );
   const unknownItems = route.budget_unknown_items ?? [];
+  // 估算项与未知项**相反**：这些钱算进去了，只是单价是假设。
+  // 两件事分开渲染 —— 只写"预算含估算值"的话，读者仍不知道 ¥19.59 里到到底有什么。
+  const estimatedItems = route.budget_estimated_items ?? [];
 
   return (
     <li
@@ -257,13 +260,18 @@ export function TripRouteCard({ route }: { route: TripRoute }) {
         </ul>
       ) : null}
 
-      {route.budget_estimated === true || unknownItems.length > 0 ? (
+      {route.budget_estimated === true || unknownItems.length > 0 || estimatedItems.length > 0 ? (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line/70 pt-3">
           {route.budget_estimated === true ? (
             <Badge
               label="预算含估算值"
-              title="部分项目没有可核验的价格，金额仅供参考"
+              title="部分项目的单价来自配置里的可审计假设，金额仅供参考"
             />
+          ) : null}
+          {estimatedItems.length > 0 ? (
+            <span className="text-[11px] leading-relaxed text-ink-faint">
+              含估算：{estimatedItems.join("、")}
+            </span>
           ) : null}
           {unknownItems.length > 0 ? (
             <span className="text-[11px] leading-relaxed text-ink-faint">

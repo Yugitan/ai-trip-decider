@@ -164,6 +164,7 @@ def _route_out(route: TripRoute, stops: Sequence[TripRouteStop]) -> TripRouteOut
         # ``feasibility.budget_estimated`` 互相矛盾（有项目全部有明确价格时后者为 False）。
         budget_estimated=bool(report.get("budget_estimated", True)),
         budget_unknown_items=list(report.get("budget_unknown_items") or []),
+        budget_estimated_items=list(report.get("budget_estimated_items") or []),
         recommend_score=route.recommend_score,
         score_breakdown=dict(breakdown),
         feasibility=dict(report),

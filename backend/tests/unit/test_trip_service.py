@@ -139,6 +139,28 @@ def test_unknown_budget_items_are_exposed() -> None:
     assert out.budget_unknown_items == ["长隆门票"]
 
 
+def test_estimated_budget_items_are_exposed_separately_from_unknown_ones() -> None:
+    """估算项与未知项必须分开往上传。
+
+    两者含义**相反**："没有价格的项（没算进去）" vs "算进去了、但单价是假设"。
+    合成一个列表的话，前端只能说一句含糊的"含估算值"；而二者混起来渲染，
+    读者会以为那条茶楼餐费没算 ¥ 里 —— 恰好是这次要修的那个错觉。
+    """
+    out = _route_out(
+        _route(
+            {
+                "budget_estimated": True,
+                "budget_unknown_items": ["光明广场·消费"],
+                "budget_estimated_items": ["点都德·breakfast"],
+            }
+        ),
+        [],
+    )
+    assert out.budget_estimated_items == ["点都德·breakfast"]
+    assert out.budget_unknown_items == ["光明广场·消费"]
+    assert _route_out(_route({}), []).budget_estimated_items == []
+
+
 # ── Diff ────────────────────────────────────────────────────────────────────
 
 

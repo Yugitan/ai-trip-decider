@@ -168,6 +168,10 @@ def test_sync_plan_is_honest_about_estimates(client: TestClient) -> None:
     assert first["budget_estimated"] is True
     sources = {stop["transport_source"] for stop in first["stops"] if stop["transport_source"]}
     assert sources <= {"amap", "osrm", "estimated", "manual"}
+    # 预算里的"算进去了但单价是假设"的项必须能传到前端：全库 0 条价格（TASKS.md B5），
+    # 一条含餐饮站点的路线若不写明餐费是估算的，那个总额就只是一个车票钱。
+    assert isinstance(first["budget_estimated_items"], list)
+    assert "budget_unknown_items" in first
 
 
 def test_global_daily_budget_switches_plans_to_local_only(

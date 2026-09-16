@@ -86,7 +86,11 @@ def plan_routes(
     anchors = [c.place for c in candidates[: limits.planning.anchor_pool]]
 
     for anchor in anchors:
-        start = Stop(place=anchor, arrive_min=intent.start_min, stay_min=stay_duration_min(anchor))
+        start = Stop(
+            place=anchor,
+            arrive_min=intent.start_min,
+            stay_min=stay_duration_min(anchor, intent.pace, limits=limits),
+        )
         root = _BeamNode(path_ids=(anchor.id,), stops=(start,), total_walking=0, heuristic=0.0)
         frontier = [root]
         for _depth in range(1, max_depth):
@@ -115,7 +119,7 @@ def plan_routes(
                         stay_min=prev.stay_min,
                         leg_to_next=leg,
                     )
-                    stay = stay_duration_min(nxt_place)
+                    stay = stay_duration_min(nxt_place, intent.pace, limits=limits)
                     new_stop = Stop(
                         place=nxt_place,
                         arrive_min=arrive,

@@ -278,8 +278,15 @@ class BudgetEstimate:
     """一段行程的费用估算。
 
     ★ 诚实性约定 ★
-    ``unknown_items`` 记录"因为没有可靠价格而**没有计入**"的项目。
-    它们**不按 0 元计** —— 那会让预算看起来比实际低，是变相的编造。
+    三类项目分得清清楚楚，因为它们的实际含义完全不同：
+
+    - ``unknown_items``：**没有计入金额**的项目（没有可靠价格）。
+      它们**不按 0 元计** —— 那会让预算看起来比实际低，是变相的编造。
+    - ``estimated_items``：**计入了金额、但单价是假设**的项目（餐费没有价格时
+      用 config/limits.yaml 里的餐费单价推定，交通费同理）。
+      "估算"不等于"未知"：一个是"我猜了、并告诉你猜的什么"，一个是"我没算"。
+    - 剩下的就是有来源的真实价格。
+
     ``estimated`` 为 True 表示金额中含有估算值（交通费/餐费单价来自
     config/limits.yaml 的可审计假设，不是真实报价）。
     """
@@ -287,6 +294,7 @@ class BudgetEstimate:
     min_cny: Decimal
     max_cny: Decimal
     unknown_items: tuple[str, ...] = ()
+    estimated_items: tuple[str, ...] = ()
     estimated: bool = True
     scope: Literal["per_person", "total"] = "per_person"
 
