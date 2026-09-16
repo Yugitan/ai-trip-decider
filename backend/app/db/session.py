@@ -83,8 +83,22 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 
 async def dispose_engines() -> None:
-    """应用关闭时释放连接池。"""
-    for engine in list(_engines.values()):
-        await engine.dispose()
+    """应用关闭时释放连接池。
+
+    ★ 先把缓存摘掉，再尝试关闭 ★
+    引擎是按 URL 缓存的，而连接绑在**创建它的事件循环**上。换到一个新循环里关闭一个
+    旧循环建的引擎时，asyncpg 会抛 ``got Future ... attached to a different loop``
+    （关闭要 await 回它自己的循环）。旧实现把 ``clear()`` 放在循环之后，于是这一抛会
+    留下一个**已经不可用但仍在缓存里**的引擎：一次无害的关闭失败变成后面每一条用例
+    的失败（实测是间歇性的 —— 取决于那一刻池里有没有空闲连接）。
+    现在缓存先清：最坏情况只是一个连接池没有被优雅关闭，进程退出时由操作系统回收。
+    """
+    engines = list(_engines.values())
     _engines.clear()
     _sessionmakers.clear()
+    for engine in engines:
+        try:
+            await engine.dispose()
+        except RuntimeError:
+            # 只吞"循环不对"这一类（跨循环关闭）；其余照旧抛，别顺手把真问题藏了。
+            continue

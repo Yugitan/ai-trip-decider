@@ -47,6 +47,9 @@ backend/data/raw/*.json
 .workbuddy-ai/
 # 一次性数据探测/抓取的临时现场（证据会誊写进 TASKS.md，现场本身不入库）
 .scratch/
+# `make perf` 的原始证据（next build 日志 / LCP 读数 / perf.json / 服务日志）：
+# 结论誊写进 docs/PERF_REPORT.md，现场本身每次重跑都会变，因而不入库。
+.perf/
 
 # ── 系统 ────────────────────────────────────────────────────────────────────
 .DS_Store

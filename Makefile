@@ -220,6 +220,43 @@ cost: ## 输出成本报告
 report: validate ## 生成知识库数据质量报告
 	@echo "报告见 docs/DATA_REPORT.md"
 
+# ── 性能（PRD §23.6）────────────────────────────────────────────────────────
+# 产物是给人看的 docs/PERF_REPORT.md，以及 .perf/ 下的原始证据
+# （next build 日志、LCP 读数、机器可读的 perf.json）—— 数字必须能回看，
+# 而不是只在某次终端滚动里出现过。
+#
+# PERF_DIR 保持**相对路径**：benchmark.py 是从 backend/ 启动的，
+# 配方里用 `../$(PERF_DIR)/...` 指回仓库根。
+PERF_DIR  ?= .perf
+PERF_PORT ?= 3100
+
+.PHONY: perf
+perf: ## 性能压测 + 前端首屏/LCP，重新生成 docs/PERF_REPORT.md（约 3 分钟）
+	@mkdir -p $(PERF_DIR)
+	@$(MAKE) perf-build
+	@# LCP 采集要起前后端；它失败不该连累后端那份报告 —— 报告里「分享页 LCP」
+	@# 会如实写未测，而不是留旧数字或空着（刻意在前面加 `-`）。
+	-@$(MAKE) perf-lcp
+	$(MAKE) perf-backend
+
+.PHONY: perf-build
+perf-build: ## 生产构建并把 next build 输出留档（报告要解析首屏 JS）
+	@mkdir -p $(PERF_DIR)
+	@# `set -o pipefail` 不能省：不加的话 build 失败会被 tee 的退出码盖掉，
+	@# 于是一份失败的构建会安静地喂给报告一个旧的体积数字。
+	@cd $(FRONTEND) && set -o pipefail && pnpm build 2>&1 | tee ../$(PERF_DIR)/next-build.log
+
+.PHONY: perf-lcp
+perf-lcp: ## 量首页与分享页 LCP（自动起前后端；已在跑的服务直接复用）
+	PERF_DIR="$(CURDIR)/$(PERF_DIR)" PERF_PORT=$(PERF_PORT) bash $(FRONTEND)/scripts/perf-lcp.sh
+
+.PHONY: perf-backend
+perf-backend: ## 只跑后端压测（复用 .perf/ 里已有的构建日志与 LCP 读数）
+	cd $(BACKEND) && $(SCRIPT_ENV) $(UV) run python scripts/benchmark.py \
+		--frontend-build-log ../$(PERF_DIR)/next-build.log \
+		--web-vitals ../$(PERF_DIR)/web-vitals.json \
+		--json ../$(PERF_DIR)/perf.json
+
 .PHONY: clean
 clean: ## 清理缓存与构建产物
 	find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true

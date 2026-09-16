@@ -23,9 +23,14 @@
 > 前端闸门实测：`pnpm test --run` **329 passed** / `typecheck` / `lint` / `build` 全绿；
 > 覆盖率 statements **98.94%** / branches 89.31%（闸门 96 / 84）。
 >
+> **2026-09-16 追加实跑（M7 性能与安全检查）**：`make security`（密钥模式扫描 clean +
+> domain 纯度 20 passed）、**`make perf`**（一条命令跑完压测与前端 LCP，产物见 §8.11）、
+> `make check`（exit=0）。后端 **1083 passed** / 覆盖率 **95.61%**；
+> 前端 **394 passed** / statements **99.06%**。分享页 LCP 392ms、首屏 JS 127 KB、
+> 首页 TTI 如实写"未测"。
+>
 > **未实测**（文中数字来自 `README.md`/`Makefile`）：`make setup`（会装依赖，没有重跑）、
-> `make fetch-osm`（需网络，约 9 分钟）、
-> `make relations` / `make todo` / `make security`。
+> `make fetch-osm`（需网络，约 9 分钟）、`make relations` / `make todo`。
 
 ---
 
@@ -220,11 +225,12 @@ make validate
 
 ---
 
-## 5. 现在能用什么（截至 2026-09-13）
+## 5. 现在能用什么（截至 2026-09-16）
 
-进度：**M0–M5 全部完成**（首页提交 → 三套方案时间线 / 逐项对比表 → `/trip/{id}` 独立结果页 →
+进度：**M0–M7 全部完成**（首页提交 → 三套方案时间线 / 逐项对比表 → `/trip/{id}` 独立结果页 →
 改路线 / 撤销 / 分享 / 分享页「复制这套路线」/ 地图（需配 `NEXT_PUBLIC_AMAP_JS_KEY`，见 §8.7）/
-分享页 OG 图 + JSON-LD（见 §8.10））。下一步：M6（数据缺口）/ M7（E2E + 性能）。
+分享页 OG 图 + JSON-LD（见 §8.10）；验收侧：E2E 16 场景、异常注入 25 项、
+性能与安全检查（`make perf` / `make security`，见 §8.11））。下一步：M8（交付报告）。
 
 ### 5.1 可以打开的前端页面
 
@@ -449,6 +455,7 @@ cd frontend && pnpm test --run components/__tests__/planner-form.test.tsx
 make validate   # 知识库质检：不达标非零退出（2026-09-13 修好，原先报 No module named 'app'）
 make todo       # 扫 TODO / FIXME / console.error / 未实现标记
 make security   # 密钥泄露模式扫描 + domain 层纯净性（AST 强制不得 import httpx/sqlalchemy/fastapi）
+make perf       # 性能压测 + 前端 LCP，重写 docs/PERF_REPORT.md（约 3 分钟，见 §8.11）
 ```
 
 代码风格与类型：
@@ -811,6 +818,46 @@ shell 里的 `DEEPSEEK_API_KEY`，见 TASKS.md 本节）。两处合起来的结
 `twitter:card=summary_large_image`、`twitter:image` 全部出现在 head；
 JSON-LD 三站带时间窗；行程卡与空卡是**不同的两张图**（像素差异 14.5%，不是缓存串了）；
 失效 slug 的 OG 图是真话空卡（200 PNG），页面 `noindex`。
+
+### 8.11 性能与安全检查怎么跑（2026-09-16，M7）
+
+三个命令，分属三种性质（不要混成一个）：
+
+```bash
+make security   # 密钥泄露模式扫描 + domain 层纯净性（20 条 AST 断言）—— 秒级
+make perf       # 压测 + 前端首屏/LCP，重写 docs/PERF_REPORT.md —— 约 3 分钟
+make check      # 那几条秒级的性能门槛已经在这里面（不必等 perf）
+```
+
+`make perf` 做四件事，四个都能单独跑：
+
+| 目标 | 做什么 | 需要什么 |
+| --- | --- | --- |
+| `make perf-build` | `pnpm build`，输出留档到 `.perf/next-build.log`（报告要从它取首屏 JS） | 无 |
+| `make perf-lcp` | 起前后端（已经在跑的就复用）→ 造一条**真实**的分享行程拿 slug → 量首页与分享页 LCP | Postgres + 已建库 + Playwright 的 chromium |
+| `make perf-backend` | 冷/缓存/修改/并发/束搜索/慢 SQL + 生成报告 | Postgres + 已建库 |
+| `make perf` | 以上三件的顺序执行 | 同上 |
+
+产物分两处：**结论**在 `docs/PERF_REPORT.md`（要入库，给人看），
+**原始证据**在 `.perf/`（不入库：`next build` 日志、`web-vitals.json`、`perf.json`、服务日志）。
+`make perf` 里的 `perf-lcp` 前面有一个 `-`：LCP 采集失败（比如后端被限流、Chromium 没装）
+不该连累后端那份报告，报告会在"其他核对项"里如实写"分享页 LCP 未测"。
+
+**报告里的三条纪律**（都是有代价才定下来的）：
+
+1. **没测到的门槛不许打勾**。首页 TTI 至今写着 `⏭ 不可测` —— TTI 要长任务分析，
+   拿 `domInteractive` 顶替会得到一个偏低且含义不同的数；`TTI ≥ LCP` 只说明首页 LCP 是它的**下界**。
+2. **样本量与读数一起报**。分位数用最近秩（rank = ceil(q·n)），n=10 时 p95 就是最大的那个样本。
+3. **第三方延迟不进门槛**。PRD 的"冷启动 ≤ 8s"用**关掉 LLM**的规则引擎路径判（确定性、可复现），
+   开着 LLM 的读数另报一行观察值 —— 否则这道门槛会随上游当天的心情浮动。
+
+秒级的那部分在 `backend/tests/integration/test_perf_budget.py`（8 条）：
+门槛数值按 PRD 原文写在测试里、再与 `scripts/benchmark.py` 的常量互相钉住
+（直接引脚本常量的话，把 8s 改成 30s 测试也照样绿）；另有三条守"报告不说假话"。
+
+> ⚠️ **写 shell 脚本时注意**：`"$PERF_PORT）"` 这种"变量紧跟全角标点"会让 bash 把标点的首字节
+> 读进变量名，报出来是一句看不懂的 `PERF_PORT<乱码>: unbound variable`（本轮首次运行就挂在这里）。
+> 一律写 `${PERF_PORT}`。
 
 ---
 
