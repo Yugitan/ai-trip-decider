@@ -1,13 +1,22 @@
 {
+  "use_osrm": true,
+  "max_places": 800,
+  "neighbors": 12,
   "selected_places": 800,
   "route_places_included": 51,
   "candidate_pairs": 5445,
-  "osrm_pairs": 163,
-  "estimated_pairs": 5282,
+  "batch_size": 25,
+  "osrm_pairs": 130,
+  "estimated_pairs": 5315,
+  "osrm_eligible_pairs": 130,
+  "osrm_batches_ok": 32,
+  "osrm_batches_failed": 0,
+  "osrm_note": "OSRM 的 table 接口一次只算一批（batch_size=25）内部的矩阵，所以只有同批的 130 对**可能**拿到真实路网距离；实际拿到 130 对（差额来自 OSRM 判为不可路由的点对），其余 5315 对跳批次，按设计退回估算。这与“公共 OSRM 可以用多久”无关：coverage 的上限就是分批结构。",
   "written": 5445,
   "data_source_counts": {
-    "estimated": 5282,
-    "osrm": 163
+    "estimated": 5315,
+    "osrm": 130
   },
-  "elapsed_s": 25.1
+  "generated_at": "2026-09-16T03:07:19+00:00",
+  "elapsed_s": 30.6
 }

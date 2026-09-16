@@ -25,12 +25,16 @@
 >
 > **2026-09-16 追加实跑（M7 性能与安全检查）**：`make security`（密钥模式扫描 clean +
 > domain 纯度 20 passed）、**`make perf`**（一条命令跑完压测与前端 LCP，产物见 §8.11）、
-> `make check`（exit=0）。后端 **1083 passed** / 覆盖率 **95.61%**；
-> 前端 **394 passed** / statements **99.06%**。分享页 LCP 392ms、首屏 JS 127 KB、
+> `make check`（exit=0）。后端 **1086 passed** / 覆盖率 **95.61%**；
+> 前端 **394 passed** / statements **99.06%**。分享页 LCP 388ms、首屏 JS 127 KB、
 > 首页 TTI 如实写"未测"。
 >
+> **2026-09-16 追加实跑（关系图与文档对齐）**：`seed_guangzhou.py --force`（先 `pg_dump` 备份，
+> 443 条本地行程被删）+ `make relations OSRM=1` + `make validate`（0 阻断项 / 2 告警）
+> + `make perf`。发现与读法见 §8.12。
+>
 > **未实测**（文中数字来自 `README.md`/`Makefile`）：`make setup`（会装依赖，没有重跑）、
-> `make fetch-osm`（需网络，约 9 分钟）、`make relations` / `make todo`。
+> `make fetch-osm`（需网络，约 9 分钟）、`make todo`。
 
 ---
 
@@ -93,7 +97,10 @@ make dev       # 并行启动：后端 http://127.0.0.1:8000   前端 http://loc
 6. `make migrate` —— `alembic upgrade head`
 
 **注意：`make setup` 不灌知识库数据**。数据库建好后是空的，需要额外跑一次 `make seed`（见 §4）。
-当前本机开发库的实测状态：`places = 1622`、`routes = 44`、迁移版本 `217165a7a13b (head)`。
+当前本机开发库的实测状态（2026-09-16 重跑建库后）：`places = 3166`、`routes = 44`、
+知识库版本 `gz-2026.09.16-1a12399485`、迁移版本 `217165a7a13b (head)`。
+（`places` 从 M1 时代的 1622 涨到 3166，是 2026-09-15 补齐 B1/B2 两类数据的结果；
+本行写的是**日期 + 实测值**，不写“约 3000”这种会慢慢变成假话的写法。）
 
 ---
 
@@ -114,7 +121,7 @@ make dev-frontend   # 只起前端：localhost:3000（next dev）
 | Swagger UI | http://127.0.0.1:8000/docs | 非生产环境才有（生产会关掉 `/docs`） |
 | 健康检查 | http://127.0.0.1:8000/api/v1/health | 见下方示例 |
 
-后端正常启动的实测输出（节选）：
+后端正常启动的实测输出（节选，2026-09-16）：
 
 ```json
 {
@@ -123,8 +130,8 @@ make dev-frontend   # 只起前端：localhost:3000（next dev）
     "status": "ok",
     "version": "0.1.0",
     "env": "development",
-    "database": { "ok": true, "latency_ms": 31, "active_places": 1622, "routes": 44, "cities": 1,
-                  "kb_version": "gz-2026.09.10-8a77da52e4", "schema_ready": true },
+    "database": { "ok": true, "latency_ms": 31, "active_places": 3166, "routes": 44, "cities": 1,
+                  "kb_version": "gz-2026.09.16-1a12399485", "schema_ready": true },
     "degraded_modes": [
       "llm:disabled(规则引擎+模板兜底)",
       "search:seed_only(不联网，仅本地知识库)",
@@ -858,6 +865,41 @@ make check      # 那几条秒级的性能门槛已经在这里面（不必等 p
 > ⚠️ **写 shell 脚本时注意**：`"$PERF_PORT）"` 这种"变量紧跟全角标点"会让 bash 把标点的首字节
 > 读进变量名，报出来是一句看不懂的 `PERF_PORT<乱码>: unbound variable`（本轮首次运行就挂在这里）。
 > 一律写 `${PERF_PORT}`。
+
+### 8.12 关系图为什么只有几个点拿到「真实路网」（2026-09-16）
+
+`make relations OSRM=1` 会把一部分地点对的直线估算换成真实路网距离。
+但它**永远不可能全覆盖**，原因是结构性的：
+
+- OSRM 的 `table` 接口一次只算**一批点内部**的矩阵（`batch_size: 25`），
+  跳批次的候选对按设计退回估算；
+- 分批是按 **UUID 排序**切的，而重跑建库会给地点重新编号 → 分批边界跟着变。
+
+所以“真实路网占比”这个数会自己漂。实测（同一份 5445 对候选，四次重算）：
+
+| 次 | 真实路网对数 | 批内可覆盖上限 | 失败批次 |
+| --- | --- | --- | --- |
+| M1 时代 | 163 | 当时未记录 | — |
+| M6 补完数据后 | 161 | 当时未记录 | — |
+| 2026-09-16 重跑建库 | 146 | 146 | 0 |
+| 2026-09-16 最终重跑 | 130 | 130 | 0 |
+
+**关键读法**：最后两次里"实际拿到"与"批内上限"**逐对相等**，失败批次为 0 ——
+也就是说批内能拿到的都拿到了，差异全部来自分批结构，不是网络失败。
+`docs/RELATION_REPORT.json` 现在把这几个数**分开**记（`osrm_pairs` / `osrm_eligible_pairs` /
+`osrm_batches_failed` / `use_osrm` / `generated_at`），就是为了一眼看出来是哪一种。
+
+> 因此：**别把覆盖率数字抄进别的文档** —— 它一重算就变了。
+> `docs/DATA_REPORT.md` 里那一段已经改成只讲结构与后果，数字指向上面那份 JSON。
+
+两个跟它挨着的坑：
+
+- **重跑建库会静默清空关系图**（`place_relations` 对 `places` 是级联删除），
+  所以 `seed` 之后**必须**再跑一次 `make relations`，否则规划会退化成“没有任何关系数据”
+  （不会报错，只是建议质量变差——更难发现）。
+- **`kb_version` 里带日期**（`gz-YYYY.MM.DD-<内容摘要>`）：内容没变时摘要不变，
+  但日期会变。所以文档里的版本号只在本日建库后才是对的 —— 对不齐时先看
+  `SELECT version FROM kb_versions ORDER BY created_at DESC LIMIT 1`，别去改文档。
 
 ---
 

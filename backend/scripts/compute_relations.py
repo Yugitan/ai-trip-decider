@@ -36,6 +36,7 @@ import sys
 import time
 import uuid
 from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -147,6 +148,28 @@ def compute_pair(
     )
 
 
+def count_eligible_pairs(
+    pairs: Iterable[tuple[uuid.UUID, uuid.UUID]], chunk_of: Mapping[uuid.UUID, int]
+) -> int:
+    """有多少候选对**有可能**拿到真实路网距离。
+
+    OSRM 的 table 接口一次只算**一批点内部**的矩阵（`batch_size`，默认 25），
+    所以一对地点只有落在同一批里才可能拿到真实距离 —— 跳批次的必然退回估算。
+    这个数就是 `osrm_pairs` 的**结构性上限**，而不是"网络好不好"的指标。
+
+    为什么必须单独记它：早期报告里只有 `osrm_pairs`，读者无法分辨"这对是跳批次"
+    还是"OSRM 挂了/失败了" —— 实测一次重算从 163 变成 161（地点集合变了，
+    于是按 UUID 排序后的分批边界也变了），而报告里 **看不出** 是哪种原因。
+    """
+    eligible = 0
+    for a, b in pairs:
+        index = chunk_of.get(a)
+        # 两个都没登记（`.get` 都返回 None）不算“同批”：没分过批的点对不可能被覆盖。
+        if index is not None and index == chunk_of.get(b):
+            eligible += 1
+    return eligible
+
+
 def recommend_transport(distance_m: float) -> str:
     if distance_m <= 1500:
         return "walk"
@@ -182,7 +205,14 @@ async def build_relations(*, use_osrm: bool, max_places: int, neighbors: int) ->
     max_pair_distance = graph_limits.max_pair_distance_m
 
     maker = get_sessionmaker()
-    stats: dict[str, object] = {}
+    # 报告必须能自己说明"这是哪种模式、什么参数"：同一份文件既可能是离线估算
+    # 也可能是真实路网，不写清楚就只能靠猜（而且一次离线重算会静静地把上一次
+    # 带 OSRM 数字的报告覆盖掉，文件里不留任何痕迹）。
+    stats: dict[str, object] = {
+        "use_osrm": use_osrm,
+        "max_places": max_places,
+        "neighbors": neighbors,
+    }
 
     async with maker() as session:
         city = (await session.execute(select(City).where(City.slug == "guangzhou"))).scalar_one_or_none()
@@ -254,9 +284,13 @@ async def build_relations(*, use_osrm: bool, max_places: int, neighbors: int) ->
 
         # ── 可选：用 OSRM 取真实路网距离（只对候选对做，避免几万次调用）──
         osrm_matrix: dict[tuple[uuid.UUID, uuid.UUID], float] = {}
+        stats["batch_size"] = graph_limits.batch_size
         if use_osrm:
             batch = graph_limits.batch_size
             unique_ids: list[uuid.UUID] = sorted({pid for pair in pairs for pid in pair})
+            chunk_of: dict[uuid.UUID, int] = {}
+            batches_ok = 0
+            batches_failed = 0
             transport = httpx.AsyncClient(
                 timeout=max(20.0, limits.providers.map_timeout_s * 3),
                 headers={"User-Agent": settings.nominatim_user_agent},
@@ -264,12 +298,18 @@ async def build_relations(*, use_osrm: bool, max_places: int, neighbors: int) ->
             async with transport as client:
                 for start in range(0, len(unique_ids), batch):
                     chunk = unique_ids[start : start + batch]
+                    # 先登记"这个点在第几批"，失败也不例外 —— 否则那一批的点会
+                    # 被当成"没分过批"，报告里的结构性上限就少算了。
+                    for pid in chunk:
+                        chunk_of[pid] = start // batch
                     coords = [(by_id[pid].latitude, by_id[pid].longitude) for pid in chunk]
                     try:
                         # fetch_osrm_distances 返回的是"矩阵下标对 → 米"，
                         # 这里立刻换回真实 place_id，避免下标与 UUID 混用（曾因此写错键）。
                         raw_matrix = await fetch_osrm_distances(client, coords)
+                        batches_ok += 1
                     except Exception as exc:  # 单个批次失败不影响整体，该批退回估算
+                        batches_failed += 1
                         print(f"    ⚠︎ OSRM 批次 {start // batch + 1} 失败（{type(exc).__name__}），该批退回估算")
                         continue
                     for (row, col), meters in raw_matrix.items():
@@ -280,8 +320,25 @@ async def build_relations(*, use_osrm: bool, max_places: int, neighbors: int) ->
             # 所以不能用 len(osrm_matrix) 去减 len(pairs) —— 早期实现这么算，
             # 结果打印出 -1155 这种负数，明显是错的统计口径。
             osrm_pair_count = sum(1 for pair in pairs if pair in osrm_matrix)
+            eligible = count_eligible_pairs(pairs, chunk_of)
             stats["osrm_pairs"] = osrm_pair_count
             stats["estimated_pairs"] = len(pairs) - osrm_pair_count
+            stats["osrm_eligible_pairs"] = eligible
+            stats["osrm_batches_ok"] = batches_ok
+            stats["osrm_batches_failed"] = batches_failed
+            # 把"结构性上限"与"实际拿到"一并写进报告：只有这两个数都在，
+            # 读者才能分辨 osrm_pairs 的涨跌是分批边界变了还是服务出错了。
+            gap_note = (
+                "差额来自 OSRM 判为不可路由的点对"
+                if batches_failed == 0
+                else "差额里既有失败批次、也有 OSRM 判为不可路由的点对"
+            )
+            stats["osrm_note"] = (
+                f"OSRM 的 table 接口一次只算一批（batch_size={batch}）内部的矩阵，"
+                f"所以只有同批的 {eligible} 对**可能**拿到真实路网距离；实际拿到 {osrm_pair_count} 对（{gap_note}），"
+                f"其余 {len(pairs) - eligible} 对跳批次，按设计退回估算。"
+                f"这与“公共 OSRM 可以用多久”无关：coverage 的上限就是分批结构。"
+            )
 
         # ── 写库 ──
         await session.execute(delete(PlaceRelation).where(PlaceRelation.city_id == city.id))
@@ -352,6 +409,7 @@ def main(argv: list[str] | None = None) -> int:
     stats = asyncio.run(
         build_relations(use_osrm=args.osrm, max_places=args.max_places, neighbors=args.neighbors)
     )
+    stats["generated_at"] = datetime.now(UTC).isoformat(timespec="seconds")
     stats["elapsed_s"] = round(time.monotonic() - started, 1)
 
     output = json.dumps(stats, ensure_ascii=False, indent=2)

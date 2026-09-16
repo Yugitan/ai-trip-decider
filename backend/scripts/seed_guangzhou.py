@@ -34,6 +34,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -665,6 +666,49 @@ def compute_kb_version(candidates: list[Candidate], routes: CuratedRouteFile) ->
     return f"gz-{datetime.now(UTC).strftime('%Y.%m.%d')}-{digest}"
 
 
+def relation_network_lines() -> list[str]:
+    """关系图那一段文案：**只讲结构，不抄数字**。
+
+    这段文案先是写死了「本次 5445 对里 163 对」，后来重算成 161、再重算成 146 ——
+    三次的地点集合与候选对数完全一样，变的只是**分批边界**（批次是按 UUID 排序切的），
+    一次网络失败也没有。抄数字的文案永远追不上重算，而结构性事实（table 只算批内矩阵）
+    是稳定的。所以：这里只讲结构与后果，**具体数字只留在 `docs/RELATION_REPORT.json` 一处**
+    （它现在自带 `osrm_eligible_pairs` / `osrm_batches_failed` / `generated_at`）。
+
+    读一眼那份报告只为回答一件事：当前的关系图是真实路网还是离线估算模式生成的
+    （`use_osrm`）—— 这是"这段话该怎么读"的前提，而不是一个会漂的数字。
+    """
+    from app.core.paths import docs_dir
+
+    head = "8. **关系图的真实路网占比有限，而且这个上限是结构性的**："
+    pointer = (
+        "   具体覆盖对数、失败批次数与生成时间见 `docs/RELATION_REPORT.json`"
+        "（`make relations OSRM=1` 产出）—— 这份数据报告不抄那几个数字，"
+        "因为它们会随重算变化，而抄来的数只会变成一处过期副本。"
+    )
+    path = docs_dir() / "RELATION_REPORT.json"
+    if not path.exists():
+        mode = "（当前还没有关系图报告：先跑 `make relations OSRM=1`。）"
+    else:
+        payload: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        mode = (
+            "（当前这份是真实路网模式生成的。）"
+            if payload.get("use_osrm")
+            else "（⚠︎ 当前这份是**离线估算**模式生成的：先跑 `make relations OSRM=1` 再来读。）"
+        )
+    # 编号列表的续行必须缩进，否则这一行会把清单切断，后面几行会变成一个缩进代码块。
+    mode = "   " + mode
+    return [
+        head + "OSRM 的 `table` 接口一次只算一批（`batch_size`）内部的矩阵，",
+        "   因此跳批次的候选对**必然**退回估算 —— 覆盖率的上限是分批结构，不是网络好坏。",
+        mode,
+        "   估算值逐条带 `data_source` 与 `derived_modes` 标注，从不冒充实测；",
+        "   要真正提高覆盖率只能自建 OSRM、减小 `batch_size`（请求数上升）或改用商业地图服务。",
+        pointer,
+        "",
+    ]
+
+
 def build_report(stats: SeedStats, kb_version: str, quality: dict[str, object] | None = None) -> str:
     total_dropped = sum(stats.drop_reasons.values())
     lines = [
@@ -826,11 +870,7 @@ def build_report(stats: SeedStats, kb_version: str, quality: dict[str, object] |
         "   同时保留 `aspirational_verified_ratio: 0.30` 作为**每次质检都会报出来的长期目标**——",
         "   目的是让这个缺口一直可见，而不是通过调低阈值把它藏起来。",
         "   要真正达成 30%，需要引入官方名录（广州市文旅局 A 级景区、文保单位名单等）。",
-        "8. **关系图的真实路网占比有限**：OSRM 的 table 服务一次只能算一小块矩阵，",
-        "   因此只有同一批次内的候选对拿到真实路网距离（本次 5445 对里 163 对，约 3%），",
-        "   其余是「直线距离 × 绕行系数」的估算值，逐条带 `data_source` 与 `derived_modes` 标注。",
-        "   提升方式是自建 OSRM 或改用商业地图服务，不是把估算值当实测值。",
-        "",
+        *relation_network_lines(),
     ]
     return "\n".join(lines)
 
