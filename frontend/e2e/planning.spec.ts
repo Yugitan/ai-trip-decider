@@ -30,6 +30,9 @@ test("E2E-03 完整输入提交：发出的 payload 是接口取值，不是界�
   await page.goto("/");
 
   await page.getByRole("radio", { name: "1 天" }).check();
+  // 「玩几天」与「每天玩多久」是两个控件：只改其中一个时另一个保持默认，
+  // 而两者都必须真的进 payload（否则界面上的选择会被静默丢弃）。
+  await page.getByRole("radio", { name: "半天" }).check();
   await page.getByLabel("人数", { exact: true }).fill("2");
   // 偏好 chip 的真实 input 是 `sr-only`（视觉上是胶囊）—— 点 label 才是用户真正做的事，
   // 直接 .check() 会撞上"元素不可见/不稳定"（第一版就是这么挂的）
@@ -48,6 +51,7 @@ test("E2E-03 完整输入提交：发出的 payload 是接口取值，不是界�
   expect(payload.city).toBe("guangzhou");
   expect(payload.preferences).toEqual(["food", "photo"]);
   expect(payload.pace).toBe("relaxed");
+  expect(payload.day_span).toBe("half_day");
   expect(payload.budget).toEqual({ amount: 300, scope: "per_person" });
   expect(payload.free_text).toBe("想吃早茶，走路别太多");
 

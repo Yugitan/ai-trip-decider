@@ -45,6 +45,28 @@ import {
  *    绝不在前端凑一份"看起来像真的"行程。
  */
 
+/**
+ * 按「第几天」把站点分组（保持原顺序）。
+ *
+ * 为什么不让后端直接返回嵌套结构：扁平 + `day` 的响应把分组方式留给渲染层，
+ * 旧的单日行程数据（`day` 全为 1）不需要任何迁移就是这个函数的一种输入。
+ * 这里不用 `reduce` 建 Map 再转回数组：天数少且有序，直接分组更好读也更稳定。
+ */
+export function groupByDay(stops: readonly TripStop[]): [number, TripStop[]][] {
+  const days: [number, TripStop[]][] = [];
+  for (const stop of stops) {
+    const bucket = days[days.length - 1];
+    // day 缺省按 1 处理：老数据与老响应里没有这个字段
+    const day = stop.day ?? 1;
+    if (bucket !== undefined && bucket[0] === day) {
+      bucket[1].push(stop);
+    } else {
+      days.push([day, [stop]]);
+    }
+  }
+  return days;
+}
+
 /** 站点级校验码 → 人话。码是给机器看的，这一层负责翻译。 */
 export const STOP_WARNING_LABELS: Readonly<Record<string, string>> = {
   HOURS_UNKNOWN: "营业时间未知，出发前请确认",
@@ -119,6 +141,8 @@ export function TripRouteCard({ route }: { route: TripRoute }) {
     (warning) => warning.at_seq === null || warning.at_seq === undefined,
   );
   const unknownItems = route.budget_unknown_items ?? [];
+  // 是否显示「第 N 天」分组标题：只有真的跨天了才显示
+  const multiDay = (route.stops ?? []).some((stop) => (stop.day ?? 1) > 1);
   // 估算项与未知项**相反**：这些钱算进去了，只是单价是假设。
   // 两件事分开渲染 —— 只写"预算含估算值"的话，读者仍不知道 ¥19.59 里到到底有什么。
   const estimatedItems = route.budget_estimated_items ?? [];
@@ -197,11 +221,28 @@ export function TripRouteCard({ route }: { route: TripRoute }) {
       />
 
       {route.stops.length > 0 ? (
-        <ol className="mt-3 space-y-2 border-t border-line pt-3">
-          {route.stops.map((stop) => (
-            <StopRow key={`${stop.seq}-${stop.place_id}`} stop={stop} />
+        // 多日行程按「第几天」分组渲染：一条站点流水账里跨天的站点看不出哪天走哪段，
+        // 而且第二天的 09:00 紧接在第一天的 18:00 后面会让人以为时间倒退。
+        // 单日行程只有一组，标题也就不显示（不然白占一行）。
+        <div className="mt-3 space-y-3 border-t border-line pt-3">
+          {groupByDay(route.stops).map(([day, stops]) => (
+            <div key={day}>
+              {multiDay ? (
+                <p className="mb-1.5 text-xs font-medium text-ink-soft">
+                  第 {day} 天
+                  <span className="tnum ml-2 font-normal text-ink-faint">
+                    {stops[0]?.arrive_time}–{stops[stops.length - 1]?.depart_time}
+                  </span>
+                </p>
+              ) : null}
+              <ol className="space-y-2">
+                {stops.map((stop) => (
+                  <StopRow key={`${stop.seq}-${stop.place_id}`} stop={stop} />
+                ))}
+              </ol>
+            </div>
           ))}
-        </ol>
+        </div>
       ) : (
         <p className="mt-3 border-t border-line pt-3 text-xs leading-relaxed text-ink-soft">
           这套方案没有带站点明细 —— 后端返回的就是空的，界面不会替它编几个出来。

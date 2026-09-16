@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from typing import Literal
 
@@ -54,6 +54,10 @@ __all__ = [
 # 签名自带文档，而不是到处传裸字符串。
 
 Pace = Literal["relaxed", "balanced", "packed"]
+
+#: 游玩时长偏好：半天 / 一天 / 用满用户给的时间窗。
+#: 它是**每天**要排多久，不是整个行程多少天（那是 ``Intent.days``）。
+DaySpan = Literal["half_day", "full_day", "whole_window"]
 ArchetypeName = Literal["relaxed", "classic", "themed"]
 TransportMode = Literal["walk", "bike", "metro", "bus", "taxi", "ferry"]
 TransportSource = Literal["amap", "osrm", "estimated", "manual"]
@@ -205,16 +209,26 @@ class Leg:
 
 @dataclass(frozen=True, slots=True)
 class Stop:
-    """行程中的一站。``leg_to_next`` 为 ``None`` 表示这是最后一站。"""
+    """行程中的一站。``leg_to_next`` 为 ``None`` 表示这是（当天）最后一站。
+
+    ``day`` 从 1 开始。单日行程里它恒为 1（默认值），所以旧数据与旧调用不受影响；
+    多日行程靠它把站点分回各自的"第几天"，而且 ``arrive_min`` **每天从 0 重新计**，
+    不跨天累加 —— 第二天 09:00 就是 540，不是第 33 小时。
+    """
 
     place: Place
     arrive_min: int
     stay_min: int
     leg_to_next: Leg | None = None
+    day: int = 1
 
     @property
     def depart_min(self) -> int:
         return self.arrive_min + self.stay_min
+
+    def on_day(self, day: int) -> Stop:
+        """换到第 ``day`` 天（其余字段不变）。组合多日行程时用它给站点打标。"""
+        return replace(self, day=day)
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,6 +243,9 @@ class RouteMetrics:
     walking_m: int
     transit_distance_m: int
     place_count: int
+
+    #: 这条行程横跨几天。1 = 单日（默认），与 ``intent.days`` 无关时也照实填。
+    days: int = 1
 
     @property
     def travel_ratio(self) -> float:
@@ -260,16 +277,26 @@ def route_metrics(stops: Sequence[Stop]) -> RouteMetrics:
     transit = sum(stop.leg_to_next.minutes for stop in stops if stop.leg_to_next)
     walking = sum(stop.leg_to_next.distance_m for stop in stops if stop.leg_to_next and stop.leg_to_next.is_walk)
     distance = sum(stop.leg_to_next.distance_m for stop in stops if stop.leg_to_next)
-    end = stops[-1].depart_min
+
+    # 总时长 = **每天各自时长之和**，不是"第一天开始到最后一天结束"的跨度。
+    # 跨天的差值里夹着一整夜的睡眠，把它当游玩时长会得出"两天游玩 33 小时"这种数；
+    # 住宿也还没进路线。所以：2 天各排 8 小时 → 合计 16 小时。
+    days = sorted({stop.day for stop in stops})
+    per_day = 0
+    for day in days:
+        block = [stop for stop in stops if stop.day == day]
+        per_day += max(0, block[-1].depart_min - block[0].arrive_min)
+
     return RouteMetrics(
         start_min=stops[0].arrive_min,
-        end_min=end,
-        total_duration_min=max(0, end - stops[0].arrive_min),
+        end_min=stops[-1].depart_min,
+        total_duration_min=per_day,
         stay_min=stay,
         transit_min=transit,
         walking_m=walking,
         transit_distance_m=distance,
         place_count=len(stops),
+        days=len(days),
     )
 
 
@@ -398,6 +425,7 @@ class Intent:
 
     city: str = "guangzhou"
     days: int = 1
+    day_span: DaySpan = "full_day"
     people: int = 2
     preferences: Mapping[str, float] = field(default_factory=dict)
     pace: Pace = "relaxed"

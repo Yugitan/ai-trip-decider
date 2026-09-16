@@ -32,7 +32,10 @@ archetypes:
       budget_fit:     0.10
       walking_fit:    0.24
       place_relation: 0.05
-    max_stops: 4
+    # max_stops 是**节奏上限**，不是一天容量的主依据（主依据是时间窗，见
+    # limits.yaml 的 day_span_minutes）。以前它被当成主依据用（relaxed 只给 4 站，
+    # 于是 12 小时窗口只排 5 小时），所以这里整体抬高一档，让它回归"别跑飞"的角色。
+    max_stops: 6
     walking_cap_ratio: 0.80        # 相对用户步行上限再收紧
     constraints: {}                # 无额外硬约束
 
@@ -47,7 +50,7 @@ archetypes:
       budget_fit:     0.08
       walking_fit:    0.06
       place_relation: 0.04
-    max_stops: 6
+    max_stops: 8
     walking_cap_ratio: 1.00
     constraints:
       # 经典型必须包含足够的高热度锚点，否则不算"经典"
@@ -65,7 +68,7 @@ archetypes:
       budget_fit:     0.10
       walking_fit:    0.09
       place_relation: 0.05
-    max_stops: 5
+    max_stops: 7
     walking_cap_ratio: 0.95
     constraints:
       # 同主题地点占站点数的最低比例

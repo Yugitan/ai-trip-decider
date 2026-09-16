@@ -265,6 +265,13 @@ export function getHealth(): Promise<ApiResult<HealthData>> {
 export interface PlanRequest {
   city: string;
   days: number;
+  /**
+   * 每天玩多久：`half_day`（半日游）/ `full_day`（一天）/ `whole_window`（用满时间窗）。
+   * 与 `days`（玩几天）是两个维度 —— 以前只有天数，`days=2` 拿到的其实是一天的行程。
+   *
+   * 可缺省：后端有默认值（`full_day`），显式传 `undefined` 不等于另一种需求。
+   */
+  day_span?: DaySpan;
   people: number;
   preferences: string[];
   pace: "relaxed" | "balanced" | "packed";
@@ -294,8 +301,12 @@ export function planTrip(payload: PlanRequest): Promise<ApiResult<{ request_id: 
  * - `feasibility.violations` / `warnings`：可行性校验的硬性失败与软性提醒；
  * - `route_count_note`：少于 3 套方案时**为什么**少，而不是凑数。
  */
+export type DaySpan = "half_day" | "full_day" | "whole_window";
+
 export interface TripStop {
   seq: number;
+  /** 第几天（1 起）。单日恒为 1；多日行程按它分组渲染。旧数据可能没有这个字段。 */
+  day?: number;
   place_id: string;
   name: string;
   category: string;

@@ -16,6 +16,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.domain.models import DaySpan
+
 __all__ = [
     "BudgetInput",
     "PlanAcceptedOut",
@@ -59,6 +61,8 @@ class PlanRequest(BaseModel):
 
     city: str = "guangzhou"
     days: int = Field(default=1, ge=1, le=7)
+    #: 游玩时长偏好：半天 / 一天 / 用满时间窗。字段名与领域层一致（``Intent.day_span``）。
+    day_span: DaySpan = "full_day"
     people: int = Field(default=2, ge=1, le=20)
     preferences: list[str] = Field(default_factory=list)
     pace: Literal["relaxed", "balanced", "packed"] = "relaxed"
@@ -89,6 +93,8 @@ class TripStopOut(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     seq: int
+    #: 第几天（1 起）。单日行程恒为 1；多日行程按它分组渲染。
+    day: int = 1
     place_id: str
     name: str
     category: str

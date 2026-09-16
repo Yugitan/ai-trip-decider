@@ -287,3 +287,51 @@ describe("TripResultView", () => {
     expect(within(card).getByText(/未通过校验：未知问题/)).toBeInTheDocument();
   });
 });
+
+describe("多日行程按天分组", () => {
+  // 单日行程与多日行程要能共存：`day` 缺省（旧数据/旧响应）当第 1 天，
+  // 不分组、不多一行标题 —— 否则单日行程会平白多出一个「第 1 天」的标题。
+
+  function renderWithStops(stops: TripRoute["stops"]) {
+    render(
+      <TripResultView
+        trip={{
+          ...TRIP,
+          days: 2,
+          routes: [{ ...FULL_ROUTE, stops, place_count: stops.length }],
+        }}
+      />,
+    );
+    return screen.getByTestId("trip-route-A");
+  }
+
+  const DAY_ONE = FULL_ROUTE.stops.map((stop) => ({ ...stop, seq: stop.seq, day: 1 }));
+  const DAY_TWO = FULL_ROUTE.stops.map((stop, index) => ({
+    ...stop,
+    seq: DAY_ONE.length + index,
+    place_id: `${stop.place_id}-d2`,
+    day: 2,
+  }));
+
+  it("两天各自出现一个「第 N 天」标题，并带当天的起止时刻", () => {
+    const card = renderWithStops([...DAY_ONE, ...DAY_TWO]);
+    // 每个标题是"第 N 天 + 当天起止"，所以直接断言标题自身的文案：
+    // 分开查时间的话会撞上每个站点行自己的 09:00–10:30（同一个正则也匹配）。
+    const headers = within(card).getAllByText(/^第 \d 天/);
+    expect(headers.map((node) => node.textContent)).toEqual([
+      expect.stringMatching(/^第 1 天\s*09:00–\d\d:\d\d$/),
+      expect.stringMatching(/^第 2 天\s*09:00–\d\d:\d\d$/),
+    ]);
+  });
+
+  it("单日行程不显示「第 N 天」标题", () => {
+    const card = renderWithStops(DAY_ONE);
+    expect(within(card).queryByText(/第 1 天/)).not.toBeInTheDocument();
+  });
+
+  it("没有 day 字段的旧数据按第 1 天处理，不显示分组标题", () => {
+    const legacy = FULL_ROUTE.stops.map(({ day: _day, ...rest }) => rest);
+    const card = renderWithStops(legacy);
+    expect(within(card).queryByText(/第 1 天/)).not.toBeInTheDocument();
+  });
+});

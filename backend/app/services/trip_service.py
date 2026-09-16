@@ -183,6 +183,9 @@ def _stop_out(stop: TripRouteStop) -> TripStopOut:
     snapshot: dict[str, Any] = dict(stop.place_snapshot or {})
     return TripStopOut(
         seq=stop.seq,
+        # ``day`` 直接来自数据库列（单日行程的旧行由 server_default 落成 1），
+        # 不在这里"猜"：按 seq 切分多天需要知道每天的站点数，那是编排层的事。
+        day=stop.day,
         place_id=str(stop.place_id),
         name=str(snapshot.get("name", "")),
         category=str(snapshot.get("category", "")),

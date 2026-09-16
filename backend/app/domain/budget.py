@@ -117,19 +117,33 @@ def estimate_leg_cost(leg: Leg, limits: BudgetLimits) -> Decimal:
     return _money(Decimal(str(fare.get(f"{leg.mode}_per_ride", 0))))
 
 
+def _stops_by_day(stops: Sequence[Stop]) -> list[tuple[int, list[Stop]]]:
+    """按 ``stop.day`` 分组，保持天数升序与天内的原顺序。"""
+    grouped: dict[int, list[Stop]] = {}
+    for stop in stops:
+        grouped.setdefault(stop.day, []).append(stop)
+    return sorted(grouped.items())
+
+
 def estimate_route_budget(
     stops: Sequence[Stop],
     intent: Intent,
     limits: BudgetLimits,
 ) -> BudgetEstimate:
-    """估算一段行程的人均/总费用。
+    """估算一段行程的人均/总费用。多日行程 = **每天各算一次再相加**。
 
     计量口径：
     - 门票：非餐饮类地点按 ``price_min/price_max``；缺失 → 计入 unknown，不按 0 算。
-    - 餐饮：行程覆盖到的餐次各算一次。若该餐次时段内**有**餐饮类站点，
+    - 餐饮：**每天**覆盖到的餐次各算一次。若该餐次时段内**有**餐饮类站点，
       则用该站点的价格；该站点也没有价格时用**配置里的餐费单价**推定并记进
       ``estimated_items``（不整笔不计 —— 理由见模块头）。
     - 交通：按段计费（见 :func:`estimate_leg_cost`）。
+
+    ★ 为什么要按天拆开算 ★
+    餐次是"每天重复一次"的开销：两天的行程吃两顿午饭。早期实现把整条站点序列
+    当成一段连续时间（取 ``stops[0].arrive_min`` 到 ``stops[-1].depart_min``），
+    两天就会被当成一段 30 小时的行程 —— 于是每个餐次**只计一次**，第二天整天
+    的饭钱直接从预算里消失，而界面上看不出少了什么。
     """
     if not stops:
         return BudgetEstimate(
@@ -140,6 +154,34 @@ def estimate_route_budget(
             scope=intent.budget.scope,
         )
 
+    min_cny = Decimal("0")
+    max_cny = Decimal("0")
+    unknown: list[str] = []
+    estimated_items: list[str] = []
+    estimated = False
+
+    for _day, block in _stops_by_day(stops):
+        part = _estimate_day_budget(block, limits)
+        min_cny += part.min_cny
+        max_cny += part.max_cny
+        unknown.extend(part.unknown_items)
+        estimated_items.extend(part.estimated_items)
+        estimated = estimated or part.estimated
+
+    people = max(1, intent.people)
+    scope = intent.budget.scope
+    return BudgetEstimate(
+        min_cny=to_total(_money(min_cny), "per_person", people) if scope == "total" else _money(min_cny),
+        max_cny=to_total(_money(max_cny), "per_person", people) if scope == "total" else _money(max_cny),
+        unknown_items=tuple(unknown),
+        estimated_items=tuple(estimated_items),
+        estimated=estimated,
+        scope=scope,
+    )
+
+
+def _estimate_day_budget(stops: Sequence[Stop], limits: BudgetLimits) -> BudgetEstimate:
+    """**一天**的预算（不含人人数的口径换算，那个在外面统一做）。"""
     min_cny = Decimal("0")
     max_cny = Decimal("0")
     unknown: list[str] = []
@@ -215,15 +257,13 @@ def estimate_route_budget(
         if not stop.leg_to_next.is_walk:
             estimated = True
 
-    people = max(1, intent.people)
-    scope = intent.budget.scope
     return BudgetEstimate(
-        min_cny=to_total(_money(min_cny), "per_person", people) if scope == "total" else _money(min_cny),
-        max_cny=to_total(_money(max_cny), "per_person", people) if scope == "total" else _money(max_cny),
+        min_cny=_money(min_cny),
+        max_cny=_money(max_cny),
         unknown_items=tuple(unknown),
         estimated_items=tuple(estimated_items),
         estimated=estimated,
-        scope=scope,
+        scope="per_person",
     )
 
 

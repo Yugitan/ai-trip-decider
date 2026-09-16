@@ -55,7 +55,7 @@ from app.core.logging import get_logger, scrub
 from app.db.models import City, Place, Trip, TripRequest, TripRoute, TripRouteStop
 from app.domain.budget import estimate_route_budget
 from app.domain.candidates import Candidate, select_candidates, stay_duration_min
-from app.domain.feasibility import FeasibilityReport, validate_route, weekday_of
+from app.domain.feasibility import FeasibilityReport, Violation, validate_route, weekday_of
 from app.domain.intent import parse_intent
 from app.domain.models import (
     ArchetypeName,
@@ -67,11 +67,12 @@ from app.domain.models import (
     RoutePlan,
     Stop,
     hhmm_to_minutes,
+    route_metrics,
 )
 from app.domain.models import (
     Place as DomainPlace,
 )
-from app.domain.planner import effective_walking_cap, plan_routes
+from app.domain.planner import day_window, effective_walking_cap, plan_routes
 from app.domain.scoring import ScoreBreakdown, dimension_score, score_route
 from app.domain.transit import leg_between
 from app.providers.registry import Providers
@@ -155,7 +156,12 @@ class PlanOutcome:
 
 @dataclass(frozen=True, slots=True)
 class _ScoredPlan:
-    """候选方案 + 它的评分与校验报告。"""
+    """候选方案 + 它的评分与校验报告。
+
+    多日行程里它仍然只装**一天**（站点的时间每天从 0 重新计，见 ``Stop.day``）；
+    把多天合成一套方案由 :func:`_merge_days` 完成 —— 这样每天各自的可行性校验、
+    当日时间窗、餐次预算都是和单日完全一样的口径，不需要在领域层里区分两种情形。
+    """
 
     plan: RoutePlan
     archetype: ArchetypeName
@@ -164,6 +170,106 @@ class _ScoredPlan:
     source: str  # generated | template
     template_route_id: uuid.UUID | None = None
     theme: str | None = None
+
+
+#: ``ScoreBreakdown`` 的全部数值列（逐项平均时用，避免漏掉某个乘数）。
+_BREAKDOWN_FIELDS: tuple[str, ...] = (
+    "preference",
+    "efficiency",
+    "time_fit",
+    "popularity",
+    "budget_fit",
+    "walking_fit",
+    "place_relation",
+    "m_diversity",
+    "m_weather",
+    "m_conflict",
+    "weighted_sum",
+    "total",
+)
+
+
+def _merge_score_breakdown(parts: Sequence[ScoreBreakdown]) -> ScoreBreakdown:
+    """多日方案的评分 = 各天的**算术平均**（逐项平均）。
+
+    为什么不取最好的一天：方案是一整趟，第二天排得糟不能因为第一天漂亮就被盖住。
+    为什么不用时长加权："某天几乎没排"那天权重会趋 0，而那恰好是最该被惩罚的情形。
+    ``weighted_sum`` 与 ``total`` 同样取平均，**不**用平均后的分项重新加权 ——
+    那等于在这里再实现一次评分公式，两份实现迟早会漂。
+    """
+    if not parts:
+        raise ValueError("没有可合并的评分")
+    count = len(parts)
+    averaged = {
+        name: round(sum(getattr(part, name) for part in parts) / count, 6)
+        for name in _BREAKDOWN_FIELDS
+    }
+    return ScoreBreakdown(**averaged)
+
+
+def _merge_reports(parts: Sequence[FeasibilityReport], stops: Sequence[Stop]) -> FeasibilityReport:
+    """合并各日的可行性报告：违规/告警逐条保留，``at_seq`` 平移到合并后的下标。
+
+    ★ 为什么必须平移 ``at_seq`` ★ 它是**站点在下标里的位置**，前端靠它把告警挂到
+    具体某一站的卡片上。合并时若不偏移，第二天的告警会全部挂到第一天的同名下标上
+    （或者直接越界消失）—— 错的位置比没有位置更难发现。
+
+    ``metrics`` 用合并后的全部站点重算，所以总时长是各天之和（见 ``route_metrics``）。
+    """
+    violations: list[Violation] = []
+    warnings: list[Violation] = []
+    offset = 0
+    for part in parts:
+        for source, target in ((part.violations, violations), (part.warnings, warnings)):
+            for item in source:
+                target.append(
+                    replace(item, at_seq=None if item.at_seq is None else item.at_seq + offset)
+                )
+        offset += part.metrics.place_count
+    return FeasibilityReport(
+        feasible=all(part.feasible for part in parts),
+        violations=tuple(violations),
+        warnings=tuple(warnings),
+        metrics=route_metrics(stops),
+    )
+
+
+def _on_day(entry: _ScoredPlan, day: int) -> _ScoredPlan:
+    """把某一天的那套方案标上"第几天"（站点时间每天从 0 重新计，见 ``Stop.day``）。"""
+    return replace(entry, plan=replace(entry.plan, stops=tuple(s.on_day(day) for s in entry.plan.stops)))
+
+
+def _best_of(entries: Sequence[_ScoredPlan]) -> _ScoredPlan:
+    """一组候选里总分最高的那套。
+
+    同分（或同分档）时用**路线本身的稳定键**做主次，而不是依赖输入顺序：
+    否则同一份需求重跑一次可能给出不同的方案，幂等与缓存命中就都不可靠了。
+    """
+    return max(entries, key=lambda item: (item.breakdown.total, tuple(item.plan.place_ids)))
+
+
+def _merge_days(days: Sequence[_ScoredPlan], intent: Intent, limits: LimitsConfig) -> _ScoredPlan:
+    """把同一 archetype 的各日行程合成**一套多日方案**（站点自带 ``day`` 标签）。"""
+    if not days:
+        raise ValueError("没有可合并的日程")
+    stops = tuple(stop for entry in days for stop in entry.plan.stops)
+    head = days[0]
+    return _ScoredPlan(
+        plan=RoutePlan(
+            archetype=head.archetype,
+            stops=stops,
+            theme=head.theme,
+            # 预算必须用合并后的站点重算：餐次是**每天各一次**的开销，
+            # 把各天的预算直接相加会重复算掉"每天固定要花的那部分"（如起步价）。
+            budget=estimate_route_budget(stops, intent, limits.budget),
+        ),
+        archetype=head.archetype,
+        report=_merge_reports([entry.report for entry in days], stops),
+        breakdown=_merge_score_breakdown([entry.breakdown for entry in days]),
+        source=head.source,
+        template_route_id=head.template_route_id,
+        theme=head.theme,
+    )
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -176,6 +282,9 @@ def intent_to_dict(intent: Intent) -> dict[str, Any]:
     return {
         "city": intent.city,
         "days": intent.days,
+        # 每天排多久：与 days 是两个维度（几天 × 每天多长），所以必须分开存，
+        # 否则光看快照无法解释"为什么 12 小时的窗口只排了 4 小时"。
+        "day_span": intent.day_span,
         "people": intent.people,
         "preferences": {k: float(v) for k, v in intent.preferences.items()},
         "pace": intent.pace,
@@ -279,6 +388,7 @@ def build_intent(
     base = Intent(
         city=payload.city,
         days=payload.days,
+        day_span=payload.day_span,
         people=payload.people,
         preferences=dict.fromkeys(payload.preferences, 1.0),
         pace=payload.pace,
@@ -476,7 +586,15 @@ class PlanService:
         walking_cap = effective_walking_cap(intent, constraints, self.limits)
         weekday = weekday_of(intent.travel_date)
 
-        scored = self._compose(candidates, templates, intent, constraints, relations, walking_cap, weekday)
+        scored, composed_days = self._compose_itineraries(
+            candidates, templates, intent, constraints, relations, walking_cap, weekday
+        )
+        if intent.days > 1 and composed_days < intent.days:
+            # 天数不够不是内部错误，是**素材不够**：如实说出来，别让标题写两天、
+            # 内容只有一天（用户上次遇到的就是这种"标题与内容不一致"）。
+            degraded.append(
+                f"days_short:{composed_days}/{intent.days}（可用的不重复地点只够排 {composed_days} 天）"
+            )
         await self._emit(
             on_progress,
             PlanProgress(
@@ -486,7 +604,7 @@ class PlanService:
                 70,
                 # 只报"通过校验的方案数"：``_score_plan`` 已经把不可行的方案丢掉了，
                 # 再报一个 checked 等于声称"所有尝试过的方案都通过了"。
-                {"feasible": len(scored)},
+                {"feasible": len(scored), "days": composed_days},
             ),
         )
         selected = self._select(scored)
@@ -810,8 +928,14 @@ class PlanService:
         relations: RelationIndex,
         walking_cap: int,
         weekday: int | None,
+        archetypes: Sequence[ArchetypeName] = ARCHETYPES,
     ) -> list[_ScoredPlan]:
-        """束搜索 + 模板复用，产出**已通过可行性校验**的方案（含评分）。"""
+        """束搜索 + 模板复用，产出**已通过可行性校验**的方案（含评分）。
+
+        ``archetypes`` 限定只排哪几种：多日行程要按（archetype × 天）分别组合，
+        而每天的候选池不同（排除了前几天用过的地点），所以不能再一次性排完。
+        默认仍是全部三种，单日调用方的行为不变。
+        """
         by_id = {c.place.id: c for c in candidates}
         scored: list[_ScoredPlan] = []
 
@@ -834,7 +958,7 @@ class PlanService:
             if entry is not None:
                 scored.append(entry)
 
-        for archetype in ARCHETYPES:
+        for archetype in archetypes:
             for plan in plan_routes(
                 candidates,
                 intent,
@@ -934,6 +1058,108 @@ class PlanService:
             template_route_id=template_route_id,
             theme=theme,
         )
+
+    def _compose_itineraries(
+        self,
+        candidates: Sequence[Candidate],
+        templates: Sequence[TemplateRoute],
+        intent: Intent,
+        constraints: Sequence[Constraint],
+        relations: RelationIndex,
+        walking_cap: int,
+        weekday: int | None,
+    ) -> tuple[list[_ScoredPlan], int]:
+        """按天顺序组合：第 N 天只在**前 N-1 天没用过的地点**里排。
+
+        ★ 为什么要顺序排而不是把 days 乘进站数上限 ★
+        ``days`` 以前只进了标题：选 2 天拿到的是一天的行程，只是版权标了"2 天行程"。
+        真正的多日行程需要"每天一份、跨天不重复"，而第二天的候选集**取决于**
+        第一天用了什么 —— 这是个顺序决策，不能靠一次束搜索算出来。
+
+        返回 ``(每天各一套的评分方案, 实际排出来的天数)``。实际天数可能少于
+        ``intent.days``（素材不够再排一天），这时**如实少一天**，不拿重复的地点凑数；
+        差值由 ``_route_count_note`` 一类的地方向用户说明。
+
+        ★ 去重是按 **archetype 各自**记的，不是三套共用一个已用集合 ★
+        A/B/C 是同一趟的三个**选项**（用户只会选其中一个），所以"互不重复"的约束是
+        “同一套方案内跨天不重”，而不是"三套之间也不重"。第一版按并集去重时，
+        三套方案被迫互相躲开，站数一多就都挤到剩下的角落地点上，彼此越来越像 ——
+        最后 ``_select`` 的 Jaccard 去重直接把它们当雷同方案丢掉了（实测只剩 1 套，
+        而 PRD 要求至少 2 套）。
+
+        ★ 第一天要保留**多个**候选，而不是只留最高分那一个 ★
+        ``_select`` 的职责是"三套方案之间要有区别"：它沿排名往下找，直到分数够高
+        又不与已选方案雷同。如果这里先把每天压成"每 archetype 一个"，它就**没得挑**——
+        只要那一个与别的 archetype 撞车，整个 archetype 就直接少一套（实测只剩 1 套，
+        而 PRD 要求至少 2 套）。所以第一天每个 archetype 留前几名作为**分支起点**，
+        后续每天的挑选都按各分支自己的"已去过"集合过滤。
+
+        分支数取 ``max_output_routes``：最终只会留下那么多套，再多的备选没有意义。
+        """
+        target_days = max(1, intent.days)
+        templates_by_archetype: dict[ArchetypeName, list[TemplateRoute]] = {}
+        for template in templates:
+            key: ArchetypeName = (
+                template.archetype if template.archetype in ARCHETYPES else "classic"
+            )
+            templates_by_archetype.setdefault(key, []).append(template)
+
+        # 第 d 天按**每个 archetype 各自的已用过地点**过滤候选池 —— 关键点：
+        # 过滤必须发生在 ``plan_routes`` **之前**。
+        # 第一版把过滤放在"挑结果时"，而 ``plan_routes`` 只返回每个 archetype 最好的
+        # 三套（它们必然围绕同一批高分锚点），于是第二天的三套与第一天高度重叠，
+        # 没有一个分支能通过"不许重复"，整个多日行程退化成一天（实测 days=3 只排出 1 天）。
+        day_plans: dict[tuple[ArchetypeName, int], list[_ScoredPlan]] = {}
+        used_by_archetype: dict[ArchetypeName, set[str]] = {}
+        for day in range(1, target_days + 1):
+            for archetype in ARCHETYPES:
+                used = used_by_archetype.setdefault(archetype, set())
+                pool = [c for c in candidates if c.place.id not in used]
+                if len(pool) < self.limits.planning.candidate_min:
+                    continue
+                # 模板路线只用在第一天：它是"别人的一天"，套到第二天会与第一天撞站。
+                day_scored = self._compose(
+                    pool,
+                    templates_by_archetype.get(archetype, []) if day == 1 else [],
+                    intent,
+                    constraints,
+                    relations,
+                    walking_cap,
+                    weekday,
+                    archetypes=(archetype,),
+                )
+                if not day_scored:
+                    continue
+                day_plans[(archetype, day)] = day_scored
+                # 当天所有候选方案出现过的地点都算"已用过"：这样第二天的方案
+                # 与"第一天可能被选中的任何一套"都不撞，不依赖"最后挑了哪个分支"。
+                used.update(
+                    stop.place.id for entry in day_scored for stop in entry.plan.stops
+                )
+        if not day_plans:
+            return [], 0
+
+        # 第一天保留多个候选作为分支起点：``_select`` 需要"前面挑剩下的"才能既满足
+        # 分数又满足"三套别雷同"。后续天各分支共用（池子已按 archetype 过滤过）。
+        itineraries: list[_ScoredPlan] = []
+        for archetype in ARCHETYPES:
+            starts = day_plans.get((archetype, 1))
+            if not starts:
+                continue
+            max_branches = self.limits.planning.max_output_routes
+            for entry in sorted(
+                starts, key=lambda item: (-item.breakdown.total, tuple(item.plan.place_ids))
+            )[:max_branches]:
+                branch = [_on_day(entry, 1)]
+                for day in range(2, target_days + 1):
+                    options = day_plans.get((archetype, day))
+                    if not options:
+                        break
+                    branch.append(_on_day(_best_of(options), day))
+                itineraries.append(_merge_days(branch, intent, self.limits))
+
+        composed_days = max((item.plan.metrics.days for item in itineraries), default=0)
+        return itineraries, composed_days
 
     def _select(self, scored: Sequence[_ScoredPlan]) -> list[_ScoredPlan]:
         """选最终方案：**每个 archetype 先占一个名额**，再按总分补满，全程 Jaccard 去重。
@@ -1071,17 +1297,32 @@ class PlanService:
             # 方案数变了就不能沿用旧的说法：那句"期望 3 套"会与结果直接矛盾
             note = self._route_count_note(len(entries))
 
+        # 实际排出来的天数，不是用户填的天数 —— 素材不够时会少排，
+        # 标题/分享页/OG 图读的都是这一列，写 ``intent.days`` 就是拿它的名字撒谎。
+        composed_days = max((item.plan.metrics.days for item, _gone in entries), default=1)
+        day_start, day_end = day_window(intent, self.limits)
+        day_label = f"{_hhmm(day_start)}–{_hhmm(day_end)}"
         trip = Trip(
             request_id=request.id,
             session_id=self.session_id,
             city_id=city.id,
-            title=f"{city.name} · {_hhmm(intent.start_min)}–{_hhmm(intent.end_min)}",
+            title=(
+                f"{city.name} · {composed_days} 天 · 每天 {day_label}"
+                if composed_days > 1
+                # 单日不写"每天"："每天 09:00–18:00" 会让人以为用户选了多天
+                else f"{city.name} · {day_label}"
+            ),
             intent_snapshot={
                 **intent_to_dict(intent),
                 "route_count_note": note,
                 "selected": len(entries),
+                # ★ 快照里的 ``days`` 仍是**用户请求的**天数（intent 的原样快照，不动它）：
+                # 修改指令的 Diff 比的是"需求改了什么"，不是"库里的地点够排几天"。
+                # 实际排出来的天数单独存一个键，两份事实各自可读。
+                "days_composed": composed_days,
+                "day_window": {"start": _hhmm(day_start), "end": _hhmm(day_end)},
             },
-            days=intent.days,
+            days=composed_days,
             route_count=len(entries),
             generation_ms=elapsed_ms,
             # 只统计**真实发生**的外部调用成本（本地知识库查询不计）。
@@ -1157,6 +1398,10 @@ class PlanService:
                     TripRouteStop(
                         trip_route_id=route.id,
                         seq=seq,
+                        # 第几天：多日行程靠它把站点分回各自的"第几天"，
+                        # 而 ``seq`` 一直是在**整条方案**里递增的（前端按 day 分组后
+                        # 仍能用 seq 排序，不用重新编号）。
+                        day=stop.day,
                         place_id=uuid.UUID(stop.place.id),
                         place_snapshot=snapshot,
                         arrive_time=_as_time(stop.arrive_min),
@@ -1374,7 +1619,9 @@ def _route_name(item: _ScoredPlan) -> str:
 def _one_liner(item: _ScoredPlan) -> str:
     metrics = item.plan.metrics
     hours = metrics.total_duration_min / 60
-    return f"{metrics.place_count} 站 · 约 {hours:.1f} 小时 · 步行 {metrics.walking_m / 1000:.1f} km"
+    # 多日行程必须把天数说出来："8 站 · 约 16 小时"看起来像一天跑了 16 小时。
+    head = f"{metrics.days} 天 · " if metrics.days > 1 else ""
+    return f"{head}{metrics.place_count} 站 · 共 {hours:.1f} 小时 · 步行 {metrics.walking_m / 1000:.1f} km"
 
 
 def _best_for(item: _ScoredPlan) -> tuple[str, ...]:
@@ -1386,6 +1633,9 @@ def _best_for(item: _ScoredPlan) -> tuple[str, ...]:
     """
     metrics = item.plan.metrics
     tags: list[str] = [ARCHETYPE_LABELS.get(item.archetype, item.archetype)]
+    if metrics.days > 1:
+        # 天数是**这条路线自己的**指标（可能少于用户填的），所以由这里推导而不是抄 intent
+        tags.append(f"{metrics.days} 天连游")
     if metrics.walking_m <= 4000:
         tags.append("不想多走路")
     if metrics.place_count >= 5:

@@ -112,6 +112,8 @@ const SUCCESS: PlanResult = {
 const DEFAULT_PAYLOAD = {
   city: "guangzhou",
   days: 1,
+  // 默认的游玩时长：一天（半天/尽可能多是用户可以显式选的另外两档）
+  day_span: "full_day",
   people: 2,
   preferences: [],
   pace: "relaxed",
@@ -147,6 +149,9 @@ describe("PlannerForm 提交", () => {
     render(<PlannerForm />);
 
     await user.click(screen.getByRole("radio", { name: "3 天" }));
+    // 「玩几天」与「每天玩多久」是两个独立字段：只改前者的话，本地人想玩半天
+    // 就只能自己去改结束时间 —— 所以这两个控件各要有一个改过的值进 payload。
+    await user.click(screen.getByRole("radio", { name: "半天" }));
     await user.click(screen.getByRole("radio", { name: "紧凑" }));
     await user.click(screen.getByRole("checkbox", { name: /夜景/ }));
     await user.click(screen.getByRole("checkbox", { name: /美食/ }));
@@ -156,6 +161,7 @@ describe("PlannerForm 提交", () => {
     expect(planTripMock).toHaveBeenCalledWith({
       city: "guangzhou",
       days: 3,
+      day_span: "half_day",
       people: 2,
       preferences: ["food", "night_view"],
       pace: "packed",

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 
-import { planTrip, type PlanRequest } from "@/lib/api";
+import { planTrip, type DaySpan, type PlanRequest } from "@/lib/api";
 import {
   subscribeToPlan,
   type PlanCompletedEvent,
@@ -54,6 +54,14 @@ const PACE_OPTIONS: readonly SegmentedOption<Pace>[] = [
   { value: "relaxed", label: "轻松" },
   { value: "balanced", label: "适中" },
   { value: "packed", label: "紧凑" },
+];
+
+//: 天数（玩几天）× 游玩时长（每天玩多久）是两个问题。以前只有前者，
+//: 于是"本地人周末出去转半天"只能靠手动把结束时间改到中午来表达。
+const DAY_SPAN_OPTIONS: readonly SegmentedOption<DaySpan>[] = [
+  { value: "half_day", label: "半天" },
+  { value: "full_day", label: "一天" },
+  { value: "whole_window", label: "尽可能多" },
 ];
 
 const SCOPE_OPTIONS: readonly SegmentedOption<BudgetScope>[] = [
@@ -145,8 +153,25 @@ const EXAMPLE_PACES: ReadonlyArray<{
   { pace: "balanced", patterns: ["适中", "正常", "随意", "balanced"] },
 ];
 
+const EXAMPLE_DAY_SPANS: ReadonlyArray<{
+  span: DaySpan;
+  patterns: readonly string[];
+}> = [
+  // 顺序即优先级："一天玩尽可能多" 里两者都出现，取更"满"的那个才符合原意。
+  {
+    span: "whole_window",
+    patterns: ["尽可能多", "尽量多", "多逛几个", "多去几个", "越满越好"],
+  },
+  {
+    span: "full_day",
+    patterns: ["一整天", "全天", "玩满一天", "待一整天"],
+  },
+  { span: "half_day", patterns: ["半天", "半日"] },
+];
+
 export interface ExampleDraft {
   days: number | null;
+  daySpan: DaySpan | null;
   people: number | null;
   preferences: string[];
   pace: Pace | null;
@@ -204,6 +229,13 @@ export function parseExample(text: string): ExampleDraft {
     }
   }
 
+  let daySpan: DaySpan | null = null;
+  for (const candidate of EXAMPLE_DAY_SPANS) {
+    if (daySpan === null && candidate.patterns.some((p) => compact.includes(p))) {
+      daySpan = candidate.span;
+    }
+  }
+
   const budgetAmount = toInteger(budgetToken?.[1]);
   const budget =
     budgetAmount === null
@@ -217,6 +249,7 @@ export function parseExample(text: string): ExampleDraft {
 
   return {
     days: toInteger(daysToken?.[1]),
+    daySpan,
     people: toInteger(peopleToken?.[1]),
     // 按选项顺序输出，保证 payload 稳定可比对
     preferences: PREFERENCE_OPTIONS.filter((option) =>
@@ -327,6 +360,7 @@ type Submission =
 export function PlannerForm() {
   const [city, setCity] = useState(DEFAULT_CITY);
   const [days, setDays] = useState(DEFAULT_DAYS);
+  const [daySpan, setDaySpan] = useState<DaySpan>("full_day");
   const [peopleText, setPeopleText] = useState(String(DEFAULT_PEOPLE));
   const [preferences, setPreferences] = useState<string[]>([]);
   const [pace, setPace] = useState<Pace>("relaxed");
@@ -358,6 +392,7 @@ export function PlannerForm() {
     return {
       city: cityOption?.api ?? city,
       days,
+      day_span: daySpan,
       people,
       preferences: toApiPreferences(preferences),
       pace,
@@ -395,6 +430,13 @@ export function PlannerForm() {
     if (draft.preferences.length > 0) {
       setPreferences(draft.preferences);
       filled.push(draft.preferences.join(" + "));
+    }
+    if (draft.daySpan !== null) {
+      setDaySpan(draft.daySpan);
+      const label = DAY_SPAN_OPTIONS.find(
+        (option) => option.value === draft.daySpan,
+      )?.label;
+      filled.push(label === undefined ? draft.daySpan : label);
     }
     if (draft.pace !== null) {
       setPace(draft.pace);
@@ -496,6 +538,14 @@ export function PlannerForm() {
             value={days}
             options={DAY_OPTIONS}
             onChange={setDays}
+          />
+
+          <Segmented
+            name="planner-day-span"
+            legend="每天玩多久"
+            value={daySpan}
+            options={DAY_SPAN_OPTIONS}
+            onChange={setDaySpan}
           />
 
           <div>

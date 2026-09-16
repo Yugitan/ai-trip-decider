@@ -570,6 +570,9 @@ class TripRouteStop(Base):
     id: Mapped[uuid.UUID] = uuid_pk()
     trip_route_id: Mapped[uuid.UUID] = uuid_fk("trip_routes.id")
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 第几天（1 起）。单日行程恒为 1（server_default 让旧行无需回填）。
+    # ``seq`` 仍在**整条方案**里递增，所以前端按 day 分组后不必重新编号。
+    day: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     place_id: Mapped[uuid.UUID] = uuid_fk("places.id", ondelete="RESTRICT")
     # 快照：历史行程不随知识库变更而漂移（PRD §8.7 R7）
     place_snapshot: Mapped[dict[str, Any]] = jsonb_required()
@@ -591,6 +594,7 @@ class TripRouteStop(Base):
 
     __table_args__ = (
         UniqueConstraint("trip_route_id", "seq", name="uq_trip_route_stops_seq"),
+        CheckConstraint("day >= 1", name="ck_stops_day_positive"),
         CheckConstraint(
             "transport_mode IS NULL OR "
             "transport_mode IN ('walk','metro','bus','taxi','bike','ferry','none')",

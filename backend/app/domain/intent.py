@@ -23,6 +23,7 @@ from app.domain.models import (
     PACE_ORDER,
     BudgetSpec,
     Constraint,
+    DaySpan,
     Intent,
     Pace,
     ParseResult,
@@ -138,6 +139,14 @@ NUMBER_UNITS: Mapping[str, tuple[str, ...]] = {
     "people": ("个人", "人", "位", "口"),
     "days": ("天", "日", "晚"),
     "budget": ("元", "块", "块钱", "円", "¥", "￥"),
+}
+
+#: 「玩多久」的口语说法 → ``Intent.day_span``。
+#: 与 ``days``（玩几天）是两个维度："两天"说的是横跨几天，"玩半天"说的是每天排多久。
+DAY_SPAN_TRIGGERS: Mapping[str, tuple[str, ...]] = {
+    "half_day": ("半天", "半日", "玩个半天", "转半天", "溜达半天"),
+    "full_day": ("一整天", "全天", "玩满一天", "待一整天"),
+    "whole_window": ("尽可能多", "尽量多", "多逛几个", "多去几个", "多玩几个", "越满越好"),
 }
 
 # 常见注入模式（MVP 简化版）：检测到这些短语时，禁用数值字段（预算/人数/天数）的解析，
@@ -394,6 +403,23 @@ def _apply_days_rules(text: str, state: _RuleState) -> _RuleState:
             state.applied_rules.append("days")
             state.intent = _replace_intent(state.intent, days=val)
             return state
+    return state
+
+
+def _apply_day_span_rules(text: str, state: _RuleState) -> _RuleState:
+    """解析"每天玩多久"（"玩半天"/"一整天"/"尽可能多逛几个"）。
+
+    ★ 它和 ``days`` 不是一回事 ★ "两天" 说的是横跨几天，"玩半天" 说的是每天排多久；
+    只有 days 时，本地人想玩个半天就只能自己把时间窗改成 09:00–13:00。
+    命中顺序按 ``whole_window`` → ``full_day`` → ``half_day``：
+    "一天玩尽可能多的地方"里同时出现两者，取更"满"的那个才符合原意。
+    """
+    for span in ("whole_window", "full_day", "half_day"):
+        for trigger in DAY_SPAN_TRIGGERS[span]:
+            if trigger in text:
+                state.applied_rules.append(f"day_span:{span}")
+                state.intent = _replace_intent(state.intent, day_span=span)
+                return state
     return state
 
 
@@ -685,6 +711,7 @@ def _replace_intent(
     *,
     city: str | None = None,
     days: int | None = None,
+    day_span: DaySpan | None = None,
     people: int | None = None,
     preferences: Mapping[str, float] | None = None,
     pace: Pace | None = None,
@@ -698,6 +725,7 @@ def _replace_intent(
     return Intent(
         city=city if city is not None else intent.city,
         days=days if days is not None else intent.days,
+        day_span=day_span if day_span is not None else intent.day_span,
         people=people if people is not None else intent.people,
         preferences=preferences if preferences is not None else intent.preferences,
         pace=pace if pace is not None else intent.pace,
@@ -754,6 +782,7 @@ def parse_intent(
         _apply_budget_rules,
         _apply_people_rules,
         _apply_days_rules,
+        _apply_day_span_rules,
         _apply_exclude_rules,
         lambda t, s: _apply_walking_rules(t, s, limits),
         _apply_food_count_rules,

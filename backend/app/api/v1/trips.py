@@ -119,6 +119,16 @@ def _rate_limit_keys(session_id: uuid.UUID, ip_hash: str | None) -> list[tuple[s
     return keys
 
 
+def _requested_days(trip: Trip) -> int:
+    """用户在需求里填的天数。
+
+    与 ``trip.days`` 那种"实际排出来几天"必须区分开：Diff 说的是"你的需求改了什么"，
+    而"库里的地点只够排 2 天"是另一件事（由 ``days_short`` 降级标记单独说明）。
+    用实际天数去比，"改成 3 天"会显示成什么都没改（两边都是 1）。
+    """
+    return int((trip.intent_snapshot or {}).get("days") or trip.days or 1)
+
+
 def _as_uuid(value: str) -> uuid.UUID:
     """路径里的 id 先当字符串收，再自己转 uuid。
 
@@ -468,7 +478,15 @@ async def revise_trip(
     result = await load_trip(db, outcome.trip_id)
     await db.flush()
     after = await best_route_signature(db, result.id)
-    diff = build_diff(before, after, days_before=trip.days, days_after=result.days)
+    # Diff 比的是**请求里的天数**，不是实际排出来的天数：用户改的是需求，
+    # "库里的地点只够排 2 天"是另一件事（由 ``days_short`` 降级标记单独说明）。
+    # 拿实际天数去比会让"改成 3 天"看起来什么都没改（两者都是 1）。
+    diff = build_diff(
+        before,
+        after,
+        days_before=_requested_days(trip),
+        days_after=_requested_days(result),
+    )
     await record_revision(
         db,
         trip=trip,

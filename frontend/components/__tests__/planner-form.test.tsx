@@ -107,6 +107,7 @@ describe("PlannerForm 示例一键填入", () => {
   it("parseExample 只做能确定的映射，识别不到就保持原值", () => {
     expect(parseExample("广州 2 天，情侣，喜欢美食和拍照，不想太累")).toEqual({
       days: 2,
+      daySpan: null,
       people: null,
       preferences: ["美食", "拍照", "情侣"],
       pace: "relaxed",
@@ -115,14 +116,27 @@ describe("PlannerForm 示例一键填入", () => {
 
     expect(parseExample("随便看看")).toEqual({
       days: null,
+      daySpan: null,
       people: null,
       preferences: [],
       pace: null,
       budget: null,
     });
 
+    // 「玩几天」与「每天玩多久」是两个维度，一句话里可以同时出现
+    expect(parseExample("广州 2 天，就玩个半天")).toMatchObject({
+      days: 2,
+      daySpan: "half_day",
+    });
+    expect(parseExample("想待一整天")).toMatchObject({ daySpan: "full_day" });
+    // 「一天玩尽可能多」两者都命中，取更满的那个才符合原意
+    expect(parseExample("一天尽可能多逛几个地方")).toMatchObject({
+      daySpan: "whole_window",
+    });
+
     expect(parseExample("广州 3 天，亲子，博物馆和自然，节奏适中")).toEqual({
       days: 3,
+      daySpan: null,
       people: null,
       preferences: ["亲子", "自然", "博物馆"],
       pace: "balanced",

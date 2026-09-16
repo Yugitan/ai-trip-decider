@@ -473,12 +473,28 @@ class PlanningLimits(BaseModel):
     #: 节奏 → 停留时长系数。缺省 1.0 只是为了向后兼容旧配置；
     #: 生产配置必须显式给出三档，否则 pace 会退化成"只影响步行上限"。
     stay_scale_by_pace: dict[str, float] = Field(default_factory=dict)
+    #: 游玩时长偏好 → 每天排多少分钟。键必须覆盖半天与一天（``whole_window`` 例外，
+    #: 它表示"用满用户的时间窗"，没有对应数值）。
+    day_span_minutes: dict[str, int] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _consistency(self) -> PlanningLimits:
         for pace, scale in self.stay_scale_by_pace.items():
             if scale <= 0:
                 raise ValueError(f"planning.stay_scale_by_pace.{pace} 必须为正数（停留时长系数）")
+        missing_spans = {"half_day", "full_day"} - set(self.day_span_minutes)
+        if missing_spans:
+            # fail-fast：缺了 key 会静默退回"用满整个窗口"，而那是另一种游玩时长，
+            # 用户选了「半天」却排出一整天，比直接报配置错更难查。
+            raise ValueError(f"planning.day_span_minutes 缺少时长定义：{sorted(missing_spans)}")
+        for span, minutes in self.day_span_minutes.items():
+            if minutes < self.min_stop_duration_min:
+                raise ValueError(
+                    f"planning.day_span_minutes.{span}（{minutes}）不能短于 "
+                    f"min_stop_duration_min（{self.min_stop_duration_min}）—— 那连一站都放不下"
+                )
+        if self.day_span_minutes["half_day"] >= self.day_span_minutes["full_day"]:
+            raise ValueError("planning.day_span_minutes 里 half_day 必须短于 full_day")
         if self.candidate_min >= self.candidate_max:
             raise ValueError("planning.candidate_min 必须小于 candidate_max")
         if self.single_leg_transit_warn_min >= self.single_leg_transit_prune_min:

@@ -29,7 +29,7 @@ from app.domain.models import (
 from app.domain.scoring import score_route
 from app.domain.transit import leg_between
 
-__all__ = ["effective_walking_cap", "plan_routes"]
+__all__ = ["day_budget_minutes", "day_window", "effective_walking_cap", "plan_routes"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +75,10 @@ def plan_routes(
     beam_width = limits.planning.beam_width
     max_depth = min(max_stops, limits.planning.max_depth)
     prune_min = limits.planning.single_leg_transit_prune_min
-    end_min = intent.end_min
+    # ★ 一天的终点由 day_budget_minutes 决定（游玩时长偏好 ∩ 时间窗），不是 intent.end_min。
+    # 以前这里直接取 end_min，于是 09:00–21:00 的窗口配 max_stops=4 也只排 4–5 小时：
+    # 真正的瓶颈被写死在"站数上限"里，而时间窗看起来还很空。
+    end_min = day_window(intent, limits)[1]
     weekday = weekday_of(intent.travel_date)
 
     candidate_by_id = {c.place.id: c for c in candidates}
@@ -105,7 +108,12 @@ def plan_routes(
                     if leg.minutes > prune_min:
                         continue
                     arrive = node.current_time + leg.minutes
-                    if arrive > end_min:
+                    stay = stay_duration_min(nxt_place, intent.pace, limits=limits)
+                    # ★ 比的是"走完这一站"，不是"能不能赶到" ★
+                    # 只查到达时刻的话，一天排到 3.5 小时的第 4 站可以从容地待上 2 小时 ——
+                    # 实测「半天」档（4 小时）排出 6.5 小时的行程。用户选时长要的是
+                    # "大概几点能结束"，所以这一站**必须能在配额内结束**。
+                    if arrive + stay > end_min:
                         continue
                     new_walking = node.total_walking + (leg.distance_m if leg.is_walk else 0)
                     if new_walking > hard_walking_limit:
@@ -119,7 +127,6 @@ def plan_routes(
                         stay_min=prev.stay_min,
                         leg_to_next=leg,
                     )
-                    stay = stay_duration_min(nxt_place, intent.pace, limits=limits)
                     new_stop = Stop(
                         place=nxt_place,
                         arrive_min=arrive,
@@ -200,6 +207,30 @@ def effective_walking_cap(
 
 #: 兼容旧名（模块内既有调用）。保留一个是非导入点，避免出现"两个实现"。
 _effective_walking_cap = effective_walking_cap
+
+
+def day_budget_minutes(intent: Intent, limits: LimitsConfig) -> int:
+    """**一天**要排多少分钟：游玩时长偏好与用户时间窗取小。
+
+    为什么不是直接用 ``intent.window_min``：站点数以前只由 archetype 的 ``max_stops``
+    封顶（relaxed 4 站），于是 12 小时的窗口也只排出 4–5 小时的行程 —— 而用户选了
+    「半天」时同样会排满一整天。时间窗是**上界**，游玩时长才是目标。
+
+    ``whole_window`` 不查配置：它的意思就是"用满我给的时间窗"。
+    """
+    if intent.day_span == "whole_window":
+        return intent.window_min
+    return min(intent.window_min, limits.planning.day_span_minutes[intent.day_span])
+
+
+def day_window(intent: Intent, limits: LimitsConfig) -> tuple[int, int]:
+    """某一天的起止时刻（分钟）。每天**同一套时刻**，不跨天累加。
+
+    多日行程靠 ``replace(intent, start_min=..., end_min=...)`` 把它交给既有管线，
+    这样可行性校验（WINDOW_OVERFLOW）与 time_fit 看到的都是"当天"的窗口，
+    而不是"整个旅程"的窗口 —— 拿后者去判"空耗"，第二天永远是不合格的。
+    """
+    return intent.start_min, intent.start_min + day_budget_minutes(intent, limits)
 
 
 def _build_neighbors(
