@@ -12,15 +12,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 from app.core.config import LimitsConfig, ScoringConfig, get_limits_config, get_seed_config
-from app.domain.models import Constraint, Intent, Pace, Place
+from app.domain.models import Constraint, Intent, Pace, Place, Stop
 from app.domain.scoring import dimension_score
 
 __all__ = [
     "Candidate",
     "CandidateSet",
+    "matches_theme",
     "select_anchors",
     "select_candidates",
     "stay_duration_min",
+    "theme_coverage",
 ]
 
 
@@ -176,6 +178,33 @@ def _score_place(
     popularity = place.popularity_score if place.popularity_score is not None else unknown_default
     total = 0.6 * pref + 0.4 * popularity
     return Candidate(place=place, score=round(total, 6), why=tuple(why))
+
+
+def matches_theme(place: Place, theme: str, scoring: ScoringConfig) -> bool:
+    """这个地点算不算某个「主题日」的主题站点。
+
+    判据与候选排序里的 ``why`` **完全一致**（维度分值 ≥ ``coverage_min_dim_score``）。
+    同一件事只能有一个口径：否则会出现"卡片上写着「文化 0.90」，那一天却不把它
+    算作文化站点"这种自相矛盾。
+
+    分值缺失（``unknown_score_default`` = 0.35）**不算**命中主题 —— 不知道的地方
+    不能被拿来充当"这一天的文化含量"。
+    """
+    dimension = scoring.preference_dimensions.get(theme)
+    if dimension is None:
+        return False
+    score = dimension_score(
+        place, theme, dimension, scoring.formulas.preference.unknown_score_default
+    )
+    return score >= scoring.formulas.preference.coverage_min_dim_score
+
+
+def theme_coverage(
+    stops: Sequence[Stop], theme: str, scoring: ScoringConfig
+) -> tuple[int, int]:
+    """``(主题站点数, 总站点数)``。空行程返回 ``(0, 0)``（而不是除零）。"""
+    matched = sum(1 for stop in stops if matches_theme(stop.place, theme, scoring))
+    return matched, len(stops)
 
 
 def select_anchors(

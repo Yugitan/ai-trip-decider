@@ -23,6 +23,7 @@ from app.domain.models import (
     PACE_ORDER,
     BudgetSpec,
     Constraint,
+    DayPlan,
     DaySpan,
     Intent,
     Pace,
@@ -715,20 +716,30 @@ def _replace_intent(
     people: int | None = None,
     preferences: Mapping[str, float] | None = None,
     pace: Pace | None = None,
+    day_plans: Sequence[DayPlan] | None = None,
     budget: BudgetSpec | None = None,
     start_min: int | None = None,
     end_min: int | None = None,
     travel_date: str | None = None,
     weather_sensitive: bool | None = None,
 ) -> Intent:
-    """构造一个更新了部分字段的 **新** Intent（frozen dataclass 无法就地修改）。"""
-    return Intent(
+    """构造一个更新了部分字段的 **新** Intent（frozen dataclass 无法就地修改）。
+
+    ★ 新增字段必须在这里出现一次 ★ 这个函数是逐字段重建的，漏一个字段就意味着
+    "规则引擎一旦改了什么，那个字段就被静默重置"。``day_plans`` 就属于这一类：
+    漏掉它的话，用户写一句"轻松点"，逐天设置的主题会被一并清掉。
+
+    ``pace`` 单独处理：它代表一句**整趟**的陈述，所以会改写每一天的节奏
+    （见 ``Intent.with_pace_for_all_days``）。
+    """
+    updated = Intent(
         city=city if city is not None else intent.city,
         days=days if days is not None else intent.days,
         day_span=day_span if day_span is not None else intent.day_span,
         people=people if people is not None else intent.people,
         preferences=preferences if preferences is not None else intent.preferences,
         pace=pace if pace is not None else intent.pace,
+        day_plans=tuple(day_plans) if day_plans is not None else intent.day_plans,
         budget=budget if budget is not None else intent.budget,
         start_min=start_min if start_min is not None else intent.start_min,
         end_min=end_min if end_min is not None else intent.end_min,
@@ -737,6 +748,9 @@ def _replace_intent(
             weather_sensitive if weather_sensitive is not None else intent.weather_sensitive
         ),
     )
+    if pace is not None and day_plans is None:
+        return updated.with_pace_for_all_days(pace)
+    return updated
 
 
 # ── 主入口 ──────────────────────────────────────────────────────────────────

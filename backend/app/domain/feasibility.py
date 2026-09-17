@@ -46,7 +46,14 @@ __all__ = [
 #   - ESTIMATED_TRANSIT：PRD §23.2 第 31 条要求"通勤来源 estimated → 自动附加 warning"；
 #   - HOURS_NOT_CHECKED：营业时间已知但用户没给出行日期时，既不能判"闭馆"，
 #     也不该报"营业时间未知"（它是已知的）。
-EXTENDED_CODES: frozenset[str] = frozenset({"ESTIMATED_TRANSIT", "HOURS_NOT_CHECKED"})
+#
+# 另外两个是**按天设置**（主题日）的交代，由规划层产生而不是 ``validate_route`` ——
+# 那一天自己的站点是可行的，做不到的是"这一天的主题"：
+#   - THEME_SHORTFALL：主题站点占当天的比例低于 ``limits.planning.theme_day.min_ratio``；
+#   - THEME_IGNORED：那一天选了主题，但用户又在补充要求里说了不要这个方向。
+EXTENDED_CODES: frozenset[str] = frozenset(
+    {"ESTIMATED_TRANSIT", "HOURS_NOT_CHECKED", "THEME_IGNORED", "THEME_SHORTFALL"}
+)
 
 # 全部 18 项校验码，默认全开。注意不含配置本身没有的常量 —— 这个集合只用于
 # ``enabled_checks`` 的默认值，实际行为由 ``allows(code)`` 守卫。

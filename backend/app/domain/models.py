@@ -29,6 +29,7 @@ __all__ = [
     "BudgetEstimate",
     "BudgetSpec",
     "Constraint",
+    "DayPlan",
     "Intent",
     "Leg",
     "OpeningHours",
@@ -420,6 +421,29 @@ class Constraint:
 
 
 @dataclass(frozen=True, slots=True)
+class DayPlan:
+    """某一天的玩法：**节奏 + 主题**。
+
+    ``theme`` 是一个偏好维度的键（``food`` / ``culture`` …），表示"这一天围绕什么展开"，
+    ``None`` = 不设主题（按全局偏好排）。
+
+    ★ 为什么主题是偏好维度而不是别的 ★ 界面上的"主题"曾经有两种可能的意思：
+    方案定位（relaxed/classic/themed）与现成路线名（``RoutePlan.theme``）。
+    前者是三套方案**之间**的差别（A/B/C 各自就是一个定位），按天再选一遍会把
+    三套方案的区别抹平；后者只有人工整理了路线的城市才有。偏好维度则天然是
+    "这一天的主轴"，而且库里每个地点都已经有分值 —— 判断"这站算不算这个主题"
+    不需要新数据。
+    """
+
+    pace: Pace = "relaxed"
+    theme: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.theme is not None and not self.theme.strip():
+            raise ValueError("主题要么是一个偏好维度键，要么是 None（空字符串不算「不设主题」）")
+
+
+@dataclass(frozen=True, slots=True)
 class Intent:
     """结构化的用户需求（PRD FR-02 的 ``intent`` 对象）。"""
 
@@ -428,7 +452,11 @@ class Intent:
     day_span: DaySpan = "full_day"
     people: int = 2
     preferences: Mapping[str, float] = field(default_factory=dict)
+    #: 兜底节奏：只在**那一天没有单独设置**时用它（见 ``plan_for_day``）。
+    #: 表单从 M8 起按天设置节奏，这个字段留给旧调用与"整趟都轻松点"的自由文本。
     pace: Pace = "relaxed"
+    #: 按天设置：下标 0 = 第 1 天。比 ``days`` 短时多出来的天用 ``pace`` 兜底。
+    day_plans: tuple[DayPlan, ...] = ()
     budget: BudgetSpec = BudgetSpec()
     start_min: int = hhmm_to_minutes("09:00")
     end_min: int = hhmm_to_minutes("21:00")
@@ -438,6 +466,27 @@ class Intent:
     @property
     def window_min(self) -> int:
         return max(0, self.end_min - self.start_min)
+
+    def plan_for_day(self, day: int) -> DayPlan:
+        """第 ``day`` 天（1 起）的节奏与主题。没单独设置的天用 ``pace`` 兜底。"""
+        if 1 <= day <= len(self.day_plans):
+            return self.day_plans[day - 1]
+        return DayPlan(pace=self.pace)
+
+    def with_pace_for_all_days(self, pace: Pace) -> Intent:
+        """把节奏施加到**每一天**。
+
+        自由文本里的"轻松点"是一句全局陈述，不指向某一天；而哪天该轻松是用户在
+        表单里逐天选的。两者相遇时以"刚说的"为准（PRD FR-02）—— 所以它改写每一天，
+        而不是把逐天设置丢在一边不管。
+        """
+        return replace(
+            self,
+            pace=pace,
+            day_plans=tuple(
+                DayPlan(pace=pace, theme=plan.theme) for plan in self.day_plans
+            ),
+        )
 
     @property
     def active_preferences(self) -> Mapping[str, float]:

@@ -262,6 +262,19 @@ export function getHealth(): Promise<ApiResult<HealthData>> {
  * 曾经把中文标签直接发过来，后端稳定 422（
  * 它只认枚举值，而且**应该**只认枚举值 —— 放宽等于让接口语义随 UI 文案漂移）。
  */
+export type Pace = "relaxed" | "balanced" | "packed";
+
+/**
+ * 某一天的玩法：**节奏 + 主题**（PRD FR-00）。下标 = 第几天 - 1。
+ *
+ * `theme` 是一个偏好维度键（`food` / `culture` …，与 `preferences` 同一套词表），
+ * `null` = 不设主题。主题只影响那一天：候选池先按主题收窄，再排路线。
+ */
+export interface DayPlanInput {
+  pace: Pace;
+  theme: string | null;
+}
+
 export interface PlanRequest {
   city: string;
   days: number;
@@ -274,7 +287,16 @@ export interface PlanRequest {
   day_span?: DaySpan;
   people: number;
   preferences: string[];
-  pace: "relaxed" | "balanced" | "packed";
+  /**
+   * 按天设置（下标 0 = 第 1 天，长度 = `days`）。
+   * 表单自 M8 起**逐天**设置节奏与主题，所以它取代了下面那个全局 `pace`。
+   */
+  day_plans?: DayPlanInput[];
+  /**
+   * 兜底节奏：只在某一天没出现在 `day_plans` 里时用它（旧客户端、快照重放）。
+   * 可缺省 —— 逐天设置齐了就不需要它，而后端有默认值。
+   */
+  pace?: Pace;
   budget: { amount: number; scope: "per_person" | "total" } | null;
   free_text: string;
 }

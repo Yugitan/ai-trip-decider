@@ -20,6 +20,7 @@ from app.domain.models import DaySpan
 
 __all__ = [
     "BudgetInput",
+    "DayPlanInput",
     "PlanAcceptedOut",
     "PlanRequest",
     "RevisionOut",
@@ -54,6 +55,29 @@ class BudgetInput(BaseModel):
     scope: Literal["per_person", "total"] = "per_person"
 
 
+class DayPlanInput(BaseModel):
+    """某一天的玩法：节奏 + 主题（PRD FR-00）。
+
+    ``theme`` 是一个偏好维度的键（``food`` / ``culture`` …），表示"这一天围绕什么
+    展开"；``None`` = 不设主题。键是否合法由服务层对着 ``scoring.yaml`` 校验
+    （这里不写死一份列表 —— 两份列表迟早会不一致）。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    pace: Literal["relaxed", "balanced", "packed"] = "relaxed"
+    theme: str | None = Field(default=None, max_length=32)
+
+    @field_validator("theme")
+    @classmethod
+    def _theme_is_storable(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not value.strip():
+            raise ValueError("theme 要么是偏好维度键，要么整个字段省略（空字符串不是「不设主题」）")
+        return _reject_nul(value, field_name="主题")
+
+
 class PlanRequest(BaseModel):
     """创建规划请求。字段与前端 ``lib/api.ts`` 的 ``PlanRequest`` 一一对应。"""
 
@@ -65,6 +89,10 @@ class PlanRequest(BaseModel):
     day_span: DaySpan = "full_day"
     people: int = Field(default=2, ge=1, le=20)
     preferences: list[str] = Field(default_factory=list)
+    #: 按天设置节奏与主题（下标 0 = 第 1 天）。比 ``days`` 短时，多出来的天用 ``pace``。
+    day_plans: list[DayPlanInput] = Field(default_factory=list, max_length=7)
+    #: 兜底节奏：只在某一天没在 ``day_plans`` 里出现时用它。
+    #: 表单自 M8 起逐天设置（PRD FR-00），这个字段留着接旧快照与"整趟轻松点"。
     pace: Literal["relaxed", "balanced", "packed"] = "relaxed"
     budget: BudgetInput | None = None
     free_text: str = ""

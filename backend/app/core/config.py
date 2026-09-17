@@ -484,6 +484,23 @@ class ScoringConfig(BaseModel):
 # ════════════════════════════════════════════════════════════════════════════
 
 
+class ThemeDayLimits(BaseModel):
+    """主题日（"第 2 天＝文化日"）的两个数字。
+
+    ★ 为什么需要它们 ★ 主题是**用户逐天做的显式选择**，所以"某一天凑不满主题"
+    是允许的（硬卡会让那一档直接排不出方案）；但不说出来就成了"文化日"里混了
+    一半非文化站点而用户不知道。``min_ratio`` 是"什么时候必须开口"的门槛，
+    ``min_pool`` 是"主题池小到什么程度就不配拿它排这一天"的下限。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    #: 主题站点占当天站点的最低比例，低于它就在「需要留意」里如实说明。
+    min_ratio: float = Field(default=0.6, gt=0, le=1)
+    #: 主题池小于此值就不拿它排这一天（退回完整候选池 + 如实降级）。
+    min_pool: int = Field(default=8, ge=2)
+
+
 class PlanningLimits(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -510,6 +527,8 @@ class PlanningLimits(BaseModel):
     #: 游玩时长偏好 → 每天排多少分钟。键必须覆盖半天与一天（``whole_window`` 例外，
     #: 它表示"用满用户的时间窗"，没有对应数值）。
     day_span_minutes: dict[str, int] = Field(default_factory=dict)
+    #: 主题日（按天选一个偏好方向）的两个标尺，见 ``ThemeDayLimits``。
+    theme_day: ThemeDayLimits = Field(default_factory=lambda: ThemeDayLimits())
 
     @model_validator(mode="after")
     def _consistency(self) -> PlanningLimits:
