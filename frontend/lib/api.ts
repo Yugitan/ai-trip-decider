@@ -683,6 +683,30 @@ export function listPlaces(
   query.set("offset", String(params.offset ?? 0));
   return request<PlacePage>(`/api/v1/cities/${encodeURIComponent(city)}/places?${query}`);
 }
+/**
+ * 地点搜索（`GET /api/v1/places/search`，PRD §7.2）。
+ *
+ * 与 `listPlaces` 的区别：它**不必先知道城市**，而且会带上 `city` 过滤条件本身 ——
+ * 于是"当前搜索范围是什么"可以被界面如实说出来，而不是让用户自己猜。
+ */
+export function searchPlaces(
+  q: string,
+  params: { city?: string; limit?: number } = {},
+): Promise<ApiResult<PlaceSearchResult>> {
+  const query = new URLSearchParams({ q });
+  if (params.city) query.set("city", params.city);
+  query.set("limit", String(params.limit ?? 20));
+  return request<PlaceSearchResult>(`/api/v1/places/search?${query}`);
+}
+
+export interface PlaceSearchResult {
+  query: string;
+  /** 限定城市时是 slug；不限定是 `null`（这时结果可能跨城市） */
+  city: string | null;
+  page: { total: number; limit: number; offset: number; has_more: boolean };
+  items: PlaceSummary[];
+}
+
 
 export function listRoutes(
   city: string,
