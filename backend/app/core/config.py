@@ -405,6 +405,39 @@ class Multipliers(BaseModel):
     conflict: ConflictMultiplier
 
 
+class SearchSourceCredibility(BaseModel):
+    """搜索来源可信度（PRD §13.3 的"域名可信度加权"）。
+
+    刻意**不含 TLD 推断**：没列出来的域名一律拿 ``default``。
+    按后缀匹配（``gz.gov.cn`` 也吃 ``www.gz.gov.cn`` 的条目），
+    且优先匹配最长后缀 —— 否则 ``gov.cn`` 会盖住 "gz.gov.cn" 这类更具体的条目。
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    default: float = Field(ge=0.0, le=1.0)
+    domains: dict[str, float] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _check_ranges(self) -> SearchSourceCredibility:
+        for domain, score in self.domains.items():
+            if not 0.0 <= score <= 1.0:
+                raise ValueError(f"scoring.yaml 的 search_source_credibility.{domain}={score} 不在 0..1 之间")
+            if domain.startswith(".") or "/" in domain or " " in domain:
+                raise ValueError(f"search_source_credibility 的域名写法不合法：{domain!r}（写主机后缀，如 gz.gov.cn）")
+        return self
+
+    def score_for(self, domain: str | None) -> float:
+        """按域名取可信度；未知/空域名得 ``default``（未知不是可信）。"""
+        if not domain or not domain.strip():
+            return self.default
+        host = domain.strip().lower().lstrip(".")
+        for suffix in sorted(self.domains, key=len, reverse=True):
+            if host == suffix or host.endswith("." + suffix):
+                return self.domains[suffix]
+        return self.default
+
+
 class Formulas(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -425,6 +458,7 @@ class ScoringConfig(BaseModel):
     archetypes: dict[str, ArchetypeConfig]
     formulas: Formulas
     preference_dimensions: dict[str, PreferenceDimension]
+    search_source_credibility: SearchSourceCredibility
 
     @model_validator(mode="after")
     def _check_archetypes(self) -> ScoringConfig:
@@ -590,6 +624,32 @@ class DataQualityThresholds(BaseModel):
     max_unknown_hours_ratio: float
 
 
+class SearchPolicy(BaseModel):
+    """联网搜索策略阈值（PRD §13.2–§13.4）。全部有默认值，便于测试直接构造。"""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    entity_match_floor: float = Field(default=0.90, ge=0.0, le=1.0)
+    confidence_step: float = Field(default=0.10, ge=0.0, le=1.0)
+    discovery_candidate_below: int = Field(default=8, ge=0)
+    recency_keywords: tuple[str, ...] = (
+        "最新",
+        "最近",
+        "近期",
+        "实时",
+        "新开",
+        "开业",
+        "新玩法",
+        "本月",
+        "本周",
+        "这周",
+    )
+
+    def asks_for_latest(self, free_text: str) -> bool:
+        """用户是否明确要求"最新/近期/实时"（PRD §13.4 第 4 条）。"""
+        return any(keyword in free_text for keyword in self.recency_keywords)
+
+
 class TravelMode(BaseModel):
     """一种出行方式的耗时假设（不是实测数据，用于无真实耗时的估算）。"""
 
@@ -627,6 +687,7 @@ class LimitsConfig(BaseModel):
     rate_limit: RateLimits
     cost: CostLimits
     providers: ProviderLimits
+    search: SearchPolicy = Field(default_factory=SearchPolicy)
     data_quality: DataQualityThresholds
     feasibility: dict[str, list[str]]
 

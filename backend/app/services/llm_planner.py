@@ -24,7 +24,7 @@ import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -32,6 +32,7 @@ from app.core.config import TtlConfig
 from app.core.logging import get_logger
 from app.domain.models import BudgetSpec, Constraint, Intent, Pace, ParseResult
 from app.providers.llm.base import LlmMessage, LlmProvider, LlmTier
+from app.providers.search.base import SearchResult
 from app.services.cache import CacheStore, llm_cache_key, sha256_hex
 from app.services.cost import CostLedger
 from app.services.retrieval_chain import RetrievalChain, RetrievalOutcome, RetrievalQuery
@@ -39,17 +40,23 @@ from app.services.retrieval_layers import KIND_LLM
 
 __all__ = [
     "PROMPT_VERSION",
+    "SEARCH_FACT_FIELDS",
     "TASK_INTENT",
     "TASK_NARRATIVE",
+    "TASK_SEARCH_EXTRACT",
     "LlmIntentPatch",
     "LlmNarrativeBundle",
     "LlmPlanner",
     "LlmRouteNarrative",
+    "LlmSearchExtraction",
+    "LlmSearchObservation",
     "LlmStatus",
     "LlmTrace",
     "RouteNarrative",
     "RouteNarrativeInput",
+    "SearchFactField",
     "merge_intent_patch",
+    "search_extract_messages",
     "usable_narratives",
 ]
 
@@ -60,6 +67,18 @@ PROMPT_VERSION = "2026.09.2"
 
 TASK_INTENT = "intent_patch"
 TASK_NARRATIVE = "route_narrative"
+TASK_SEARCH_EXTRACT = "search_extract"
+
+#: 搜索片段里允许抽取的字段。刻意只有这几类：它们能**佐证或推翻**库内已有事实，
+#: 而"适合拍照""值得去"这类评价性内容既不可核验、也不该进库。
+SearchFactField = Literal["opening_hours", "price", "status", "event", "note"]
+SEARCH_FACT_FIELDS: Final[tuple[SearchFactField, ...]] = (
+    "opening_hours",
+    "price",
+    "status",
+    "event",
+    "note",
+)
 
 #: 意图补丁里最多接受的排除项数量（用户一次说不了那么多；超出的多半是模型在发散）
 _MAX_EXCLUSIONS = 8
@@ -108,6 +127,28 @@ class LlmNarrativeBundle(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     routes: list[LlmRouteNarrative] = Field(default_factory=list, max_length=4)
+
+
+class LlmSearchObservation(BaseModel):
+    """从搜索结果摘要里抽出的**一条**事实（PRD §13.3 的"摘要片段级事实抽取"）。
+
+    注意这里**没有**"匹配到哪个本地地点"的字段：实体匹配由 ``app/domain/naming``
+    的纯函数做（§14），不让模型参与 —— 模型认名字靠不住，而且无法回归测试。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    place_name: str = Field(min_length=1, max_length=60)
+    field: SearchFactField
+    value: str = Field(min_length=1, max_length=200)
+    url: str = Field(min_length=1, max_length=500)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class LlmSearchExtraction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    observations: list[LlmSearchObservation] = Field(default_factory=list, max_length=40)
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,6 +333,47 @@ def narrative_messages(routes: Sequence[RouteNarrativeInput]) -> list[LlmMessage
     }
     return [
         LlmMessage(role="system", content=_NARRATIVE_SYSTEM),
+        LlmMessage(role="user", content=json.dumps(payload, ensure_ascii=False)),
+    ]
+
+
+_SEARCH_SYSTEM = (
+    "你是旅行信息抽取器。只输出一个 JSON 对象，不要输出解释或 Markdown。\n"
+    "规则：\n"
+    "1. 只抽取**摘要里明确写出来**的事实；没写就不要输出这一条。禁止推断、补全、换算、翻译。\n"
+    "2. value 必须用原文写法（如「9:00-17:30」「免费」「周一闭馆」「已停业」），不要改写、不要计算。\n"
+    "3. url 必须**原样照抄**输入的某条结果的 url，不得编造或改写链接。\n"
+    "4. field 只能取：opening_hours（营业/开放时间）、price（票价/人均）、status（停业/维修/迁址）、"
+    "event（近期活动/展览）、note（其余与出行决策有关的一句话事实）。\n"
+    "5. place_name 写摘要里出现的那个名字（原文，不要替换成你认识的地名）。\n"
+    "6. 摘要之间矛盾时，两条都抽出来（仲裁由系统做，不归你判断）。\n"
+    "7. 宁可少抽，不可猜：拿不准就不输出这一条。"
+)
+
+
+def search_extract_messages(
+    results: Sequence[SearchResult], *, question: str
+) -> list[LlmMessage]:
+    """构造搜索事实抽取的 messages（纯函数；只喂 标题/URL/摘要，不喂网页全文，PRD §13.2 禁止项）。"""
+    payload = {
+        "question": question,
+        "results": [
+            {"url": item.url, "title": item.title, "snippet": item.snippet}
+            for item in results
+        ],
+        "output_format_example": {
+            "observations": [
+                {
+                    "place_name": "地点名（原文写法）",
+                    "field": "opening_hours | price | status | event | note",
+                    "value": "原文里的说法",
+                    "url": "照抄上面某条结果的 url",
+                }
+            ]
+        },
+    }
+    return [
+        LlmMessage(role="system", content=_SEARCH_SYSTEM),
         LlmMessage(role="user", content=json.dumps(payload, ensure_ascii=False)),
     ]
 
@@ -501,6 +583,31 @@ class LlmPlanner:
             },
         )
         return merged
+
+    async def extract_search(
+        self, results: Sequence[SearchResult], *, question: str
+    ) -> list[LlmSearchObservation]:
+        """从搜索结果摘要里抽事实（PRD §13.3）。失败/无 Key 时返回空列表。
+
+        ★ 空列表是**安全**的那一侧 ★ 抽取失败只是"这次没有佐证"，
+        如果反过来拿模型编的内容去改写库内事实，一条幻觉就会污染知识库，
+        而知识库是所有后续行程的基础。
+        """
+        if not self.trace.enabled or not results:
+            self.trace.note_task(TASK_SEARCH_EXTRACT, "rule")
+            return []
+        bundle = await self._complete_json(
+            task=TASK_SEARCH_EXTRACT,
+            messages=search_extract_messages(results, question=question),
+            schema=LlmSearchExtraction,
+            ttl_kind="llm_structured",
+            temperature=0.0,
+            max_output_tokens=1024,
+        )
+        if bundle is None:
+            return []
+        self.trace.note_task(TASK_SEARCH_EXTRACT, "llm")
+        return list(bundle.observations)
 
     async def narrate(
         self, routes: Sequence[RouteNarrativeInput]

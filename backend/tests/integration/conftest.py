@@ -53,6 +53,17 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 if os.environ.get("TRIPDECIDER_TEST_LIVE_LLM") != "1":
     os.environ["LLM_PROVIDER"] = "disabled"
 
+# ── 第一步之三：集成测试**不碰真实搜索 Provider** ────────────────────────────
+# 与上一条同一个坑：开发机的 shell 里可能 `export TAVILY_API_KEY=tvly-...`
+# （**已导出的环境变量会盖住 .env**，见 RUNNING.md §8.8），而 `SEARCH_PROVIDER=auto`
+# 一看见 Key 就选 tavily。于是自从 L8 接进规划链（PRD §13.4）之后，任何命中
+# 触发条件的规划用例都会真的发起一轮**付费**搜索：断言随"网络上今天写了什么"漂移，
+# 每次本地跑都在花钱，而且它失败时会看起来像算法改动 —— 实际是环境变量在起作用。
+# 需要真联网的用例（tests/integration/test_search_live.py）自己直接构造 Provider，
+# 不受这一行影响（与 test_llm_live.py 同一口径）。
+if os.environ.get("TRIPDECIDER_TEST_LIVE_SEARCH") != "1":
+    os.environ["SEARCH_PROVIDER"] = "seed_only"
+
 from app.core.config import clear_config_cache  # noqa: E402
 
 clear_config_cache()  # 让后续 get_settings() 读到测试库
