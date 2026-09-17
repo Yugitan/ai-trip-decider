@@ -122,6 +122,29 @@ formulas:
 
 # ── 用户偏好 → 地点分值字段映射 ─────────────────────────────────────────────
 # field 为 null 时，改用 categories 做类别匹配（该维度按"是否属于这些类别"给 0/1）
+# ── 搜索来源可信度（PRD §13.3 "域名可信度加权"）──────────────────────────────
+# 联网搜索命中一条网页时，用它给这份来源打分（写进 travel_sources.credibility_score）。
+# 只影响两件事：来源在 UI 上的标注，以及冲突仲裁时"谁的话更可信"。
+# **不改变任何行程事实** —— 来自搜索的内容永远只作为"佐证"或"线索"，
+# 不会直接改写路线、时间、预算。
+# 没列在这里的域名一律拿 default（=未知），不猜、不按 TLD 推断。
+search_source_credibility:
+  default: 0.50
+  domains:
+    gov.cn: 0.95              # 政府/文旅部门公告
+    gz.gov.cn: 0.95
+    gd.gov.cn: 0.95
+    wikipedia.org: 0.75
+    zh.wikipedia.org: 0.75
+    wikidata.org: 0.70
+    openstreetmap.org: 0.70
+    amap.com: 0.65            # 地图/点评类平台：字段较全，但更新口径不透明
+    dianping.com: 0.55
+    xiaohongshu.com: 0.40     # UGC：只能当线索，不能当事实依据
+    zhihu.com: 0.45
+    ctrip.com: 0.55
+    mafengwo.cn: 0.45
+
 preference_dimensions:
   food:
     label: "美食"

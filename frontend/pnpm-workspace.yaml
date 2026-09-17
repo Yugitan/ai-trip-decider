@@ -2,6 +2,13 @@
 # 不需要在安装阶段执行构建脚本 —— 显式声明以避免 pnpm 的 ignored-builds 报错。
 allowBuilds:
   esbuild: false
+# next 自带一份 postcss（`.>next>postcss`），而 `pnpm audit --prod` 会对它报 2 high + 2 moderate
+# （GHSA-r28c-9q8g-f849 等，均为 `.map` 泄露类）。`next` 本身不锁这个传递依赖的版本，
+# 所以唯一的修法就是在这里抬到已修补的最低版本 —— 这样 §24「依赖扫描无 high/critical」
+# 才是真的成立，而不是靠 `--audit-level critical` 把告警藏起来。
+# pnpm 11 起 overrides 只在 pnpm-workspace.yaml 生效（package.json 的 `pnpm` 字段已被忽略）。
+overrides:
+  postcss: ^8.5.23
 minimumReleaseAgeExclude:
   - '@types/node@22.20.2'
   - '@types/react-dom@19.3.0'

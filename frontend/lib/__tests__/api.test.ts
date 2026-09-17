@@ -26,11 +26,11 @@ import {
   listCities,
   getCostSummary,
   listPlaces,
-  reportClientError,
-  searchPlaces,
   listRoutes,
   planTrip,
+  reportClientError,
   reviseTrip,
+  searchPlaces,
   shareTrip,
   submitFeedback,
   undoTrip,
@@ -666,25 +666,9 @@ describe("copyPublicTrip", () => {
     expect(error.status).toBe(404);
   });
 });
-describe("searchPlaces", () => {
-  it("拼上 q；给了城市就用它限定范围，没给就不写空参数", async () => {
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(
-        jsonResponse(okEnvelope({ query: "广州塔", city: "guangzhou", page: {}, items: [] })),
-      ),
-    );
 
-    await searchPlaces("广州塔", { city: "guangzhou", limit: 5 });
-    const url = String(fetchMock.mock.calls[0]?.[0]);
-    // 中文搜索词必须被编码，否则浏览器/FastAPI 对"同一个词"的解读可能不一致
-    expect(url).toContain("q=%E5%B9%BF%E5%B7%9E%E5%A1%94");
-    expect(url).toContain("city=guangzhou");
-    expect(url).toContain("limit=5");
+// ── 上报与后台（FR-11.5 / FR-13.5 / FR-12）──────────────────────────────
 
-    await searchPlaces("早茶");
-    expect(String(fetchMock.mock.calls[1]?.[0])).not.toContain("city=");
-  });
-});
 describe("submitFeedback", () => {
   it("POST /feedback，且只带走显式给出的字段", async () => {
     fetchMock.mockResolvedValue(
@@ -743,6 +727,25 @@ describe("getCostSummary", () => {
   });
 });
 
+describe("searchPlaces", () => {
+  it("拼上 q；给了城市就用它限定范围，没给就不写空参数", async () => {
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        jsonResponse(okEnvelope({ query: "广州塔", city: "guangzhou", page: {}, items: [] })),
+      ),
+    );
+
+    await searchPlaces("广州塔", { city: "guangzhou", limit: 5 });
+    const url = String(fetchMock.mock.calls[0]?.[0]);
+    // 中文搜索词必须被编码，否则浏览器/FastAPI 对"同一个词"的解读可能不一致
+    expect(url).toContain("q=%E5%B9%BF%E5%B7%9E%E5%A1%94");
+    expect(url).toContain("city=guangzhou");
+    expect(url).toContain("limit=5");
+
+    await searchPlaces("早茶");
+    expect(String(fetchMock.mock.calls[1]?.[0])).not.toContain("city=");
+  });
+});
 
 // ── ApiError 本身 ──────────────────────────────────────────────────────────
 

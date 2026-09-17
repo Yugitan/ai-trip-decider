@@ -50,6 +50,9 @@ backend/data/raw/*.json
 # `make perf` 的原始证据（next build 日志 / LCP 读数 / perf.json / 服务日志）：
 # 结论誊写进 docs/PERF_REPORT.md，现场本身每次重跑都会变，因而不入库。
 .perf/
+# 手动验证 gitleaks 时的下载现场（二进制 + sums + report.json）：
+# 结论誊写进 TASKS.md，现场本身不入库 —— 报告里躺着假 Key 的原文，不该被提交。
+.tmp-gitleaks/
 
 # ── 系统 ────────────────────────────────────────────────────────────────────
 .DS_Store

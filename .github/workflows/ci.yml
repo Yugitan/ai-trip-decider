@@ -47,8 +47,12 @@ jobs:
       PGPASSWORD: postgres
 
     steps:
-      - name: 拉取代码
+      # fetch-depth: 0 是给 gitleaks 用的（下面第 6 步）：默认的浅克隆只有 1 个提交，
+      # 扫出来的"干净"毫无意义 —— 泄露往往发生在几个月前的某次提交里。
+      - name: 拉取代码（完整历史）
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # ⚠️ setup-uv 只能固定到**精确版本**：它的移动 major 标签只到 v7，
       # 而 release 已经到 v10.1.0 —— 写 @v10 会让整个 job 在 “Set up job”
@@ -91,7 +95,113 @@ jobs:
       - name: 准备测试库（建库 + 迁移）
         run: make test-setup
 
-      # 唯一的质量闸门。它自己包含 lint / mypy / 后端覆盖率 / 前端覆盖率，
+      # §23.8 第 6 步的密钥扫描：本机 `make security` 用 `command -v gitleaks` 探测，
+      # 没装就回退到正则扫描；CI 这里装上**真身**，因为正则扫描只是替补。
+      # 固定版本 + 校验和而不是 latest：规则集会随版本变化，"某天忽然变红"应当是
+      # 一次有人升级版本的提交，而不是上游悄悄换了规则；校验和防的是下载被替换。
+      - name: 安装 gitleaks（§23.8 第 6 步）
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      # 唯一的质量闸门。它自己包含 lint / mypy / 安全扫描 / 后端覆盖率 / 前端覆盖率，
       # 所以 CI 里**不重复**跑这些步骤 —— 两套命令迟早会分叉，然后「本地绿、CI 红」。
-      - name: make check
+      - name: make check（§23.8 的 1–6 + 9）
         run: make check
+
+  e2e:
+    # §23.8 第 8 步。刻意**单独一个 job** 而不是塞进 check：
+    # 真浏览器 + 真数据库比 check 慢一个量级，而它绿/红的原因通常是界面改动，
+    # 与 lint/类型无关；分成两个 job，红了能一眼看出是哪一半。
+    # 但它 gate 在 check 之后：一个连 lint 都不过的提交不值得再花两分钟跑浏览器。
+    name: make e2e（Playwright：桌面 chromium + Pixel 7 + iPhone 14）
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # 与 check 同一套服务：E2E 跑在**真实数据库**上（见 playwright.config.ts 的说明）。
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tripdecider_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      PG_USER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v7
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.21.0
+
+      - name: 安装 Node（缓存 pnpm store）
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: 生成 .env
+        run: |
+          cp .env.example .env
+          sed -i -E 's#^DATABASE_URL=.*#DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/tripdecider_dev#' .env
+          sed -i -E 's#^TEST_DATABASE_URL=.*#TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/tripdecider_test#' .env
+
+      - name: 安装后端依赖
+        run: cd backend && uv sync --frozen
+
+      - name: 安装前端依赖
+        run: cd frontend && pnpm install --frozen-lockfile
+
+      # 只装 chromium：三个 project 全靠它（iPhone 14 那份是"视口 + UA 模拟、引擎仍用
+      # chromium"，见 playwright.config.ts），装上 WebKit 会白等约 90MB。
+      - name: 安装 Playwright 浏览器（chromium）
+        run: cd frontend && pnpm exec playwright install --with-deps chromium
+
+      # E2E 要用的是**开发库**（playwright.config.ts 拉起的后端读 DATABASE_URL），
+      # 而且必须灌好种子数据：没有地点与路线，"至少 2 套方案"这条根本排不出来。
+      # relations 必须在地点之后算（place_relations 级联删除，见 Makefile db-reset）。
+      - name: 准备并灌入知识库（迁移 + 种子 + 关系图）
+        run: |
+          make migrate
+          make seed
+          make relations
+
+      - name: make e2e
+        run: make e2e
+
+      # 失败时的 trace / 截图是唯一能复盘的东西，必须留档。
+      - name: 上传失败现场（trace / screenshot）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-traces
+          path: test-results/
+          retention-days: 7

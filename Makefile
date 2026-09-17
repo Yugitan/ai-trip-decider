@@ -197,15 +197,39 @@ todo: ## 扫描 TODO/FIXME/console.error 等遗留问题
 	@echo "── 未完成标记 ──"
 	@grep -rnE "(raise NotImplementedError|pass  # stub)" --include="*.py" $(BACKEND)/app 2>/dev/null || echo "  none"
 
+# ── 安全（PRD §23.8 第 6 步 / §24）──────────────────────────────────────────
+# 这一档刻意**只报告会让 PRD §24 的形象坍塌的问题**：hardcode 密钥、后端静态安全缺陷、
+# 依赖里的 high/critical 漏洞。bandit 的门槛放在 medium：当前 app/ 有 2 条 low（都在
+# 测试辅助路径上，属误报密度高的规则），把门槛压到 low 会让这一档天天红，然后被无视。
+#
+# bandit / pip-audit 用 `uv run --with` 临时装，不写进 dev 依赖：它们只在安全检查时需要，
+# 混进 dev 组会让「开发机上的依赖」变成审计目标本身（pip-audit 会把它们一起扫）。
+#
+# npm audit 必须显式指官方 registry：本机 .npmrc 走的是 npmmirror，而它没有实现
+# `/-/npm/v1/security/advisories/bulk`，不指的话拿到的是 ERR_PNPM_AUDIT_ENDPOINT_NOT_EXISTS，
+# 那等于没扫。
+NPM_AUDIT_REGISTRY ?= https://registry.npmjs.org
+
 .PHONY: security
-security: ## 安全扫描（密钥泄露 + domain 层纯净性）
-	@echo "── gitleaks / 密钥模式扫描 ──"
-	@grep -rnE "(sk-[A-Za-z0-9]{16,}|api[_-]?key\s*=\s*[\"'][^\"']{16,})" --include="*.py" --include="*.ts" --include="*.tsx" --include="*.json" $(BACKEND)/app $(FRONTEND)/app $(FRONTEND)/lib 2>/dev/null | grep -v "example" || echo "  clean"
+security: ## 安全扫描（gitleaks + bandit + 依赖漏洞 + domain 层纯净性）
+	@echo "── 密钥泄露扫描 ──"
+	@if command -v gitleaks >/dev/null 2>&1; then \
+		gitleaks detect --no-banner --redact; \
+	else \
+		echo "  ⚠︎ 本机未装 gitleaks（brew install gitleaks），回退到密钥模式扫描；CI 跑的是 gitleaks 真身"; \
+		grep -rnE "(sk-[A-Za-z0-9]{16,}|api[_-]?key\s*=\s*[\"'][^\"']{16,})" --include="*.py" --include="*.ts" --include="*.tsx" --include="*.json" $(BACKEND)/app $(FRONTEND)/app $(FRONTEND)/lib 2>/dev/null | grep -v "example" || echo "  clean"; \
+	fi
+	@echo "── bandit（后端静态安全扫描，medium 及以上失败）──"
+	cd $(BACKEND) && $(UV) run --with bandit bandit -q -r app --severity-level medium
+	@echo "── pip-audit（后端依赖漏洞）──"
+	cd $(BACKEND) && $(UV) run --with pip-audit pip-audit
+	@echo "── npm audit --prod（前端生产依赖漏洞，high 及以上失败）──"
+	cd $(FRONTEND) && pnpm audit --prod --audit-level high --registry $(NPM_AUDIT_REGISTRY)
 	@echo "── domain 层纯净性（AST 扫描：不得 import httpx/sqlalchemy/fastapi）──"
 	cd $(BACKEND) && $(UV) run pytest tests/unit/test_domain_purity.py -q
 
 .PHONY: check
-check: lint typecheck test-cov test-frontend-cov ## 提交前必跑：lint + 类型 + 前后端覆盖率闸门 + 测试
+check: lint typecheck security test-cov test-frontend-cov ## 提交前必跑（PRD §23.8 的 1–6 + 9）：lint + 类型 + 安全扫描 + 前后端覆盖率闸门
 
 # ── 报告 ────────────────────────────────────────────────────────────────────
 .PHONY: health
