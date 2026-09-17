@@ -159,6 +159,52 @@ def test_malformed_place_id_is_rejected(client: TestClient) -> None:
     assert response.json()["error"]["code"] == "INVALID_INPUT"
 
 
+# ── 地点搜索（PRD §7.2 ``GET /places/search``）──────────────────────────────
+
+
+def test_place_search_finds_by_name_and_echoes_the_query(client: TestClient) -> None:
+    data = client.get("/api/v1/places/search?q=广州塔").json()["data"]
+    assert data["query"] == "广州塔"
+    assert data["city"] is None  # 不限定城市时把这一点如实带上
+    assert data["page"]["total"] >= 1
+    assert any("广州塔" in item["name"] for item in data["items"])
+
+
+def test_place_search_hits_aliases_like_the_list_endpoint(client: TestClient) -> None:
+    """别名命中必须在两个端点上**完全一致**（一份谓词，否则"搜同一个词"会给出不同结果）。
+
+    这也是这个端点为什么不重新写一遍 ``ilike``：两个端点共用一个 ``_name_match``。
+    """
+    search = client.get("/api/v1/places/search?q=小蛮腰&city=guangzhou").json()["data"]
+    listed = client.get(f"/api/v1/cities/{CITY}/places?q=小蛮腰").json()["data"]
+    assert [item["id"] for item in search["items"]] == [item["id"] for item in listed["items"]]
+    assert any("广州塔" in item["name"] for item in search["items"])
+
+
+def test_place_search_can_be_scoped_to_a_city(client: TestClient) -> None:
+    scoped = client.get("/api/v1/places/search?q=广州塔&city=guangzhou").json()["data"]
+    assert scoped["city"] == "guangzhou"
+    assert scoped["items"]
+
+
+def test_place_search_rejects_unknown_city_and_blank_query(client: TestClient) -> None:
+    unknown = client.get("/api/v1/places/search?q=广州塔&city=shenzhen")
+    assert unknown.status_code == 422
+    assert unknown.json()["error"]["code"] == "UNSUPPORTED_CITY"
+
+    # 只有空格也必须被拒：放它过去等于把全库地点当成"搜索结果"返回
+    blank = client.get("/api/v1/places/search", params={"q": "   "})
+    assert blank.status_code == 422
+    assert blank.json()["error"]["code"] == "INVALID_INPUT"
+
+
+def test_place_search_no_match_is_an_empty_page_not_an_error(client: TestClient) -> None:
+    data = client.get("/api/v1/places/search?q=zzzz-不存在的名字-zzzz").json()["data"]
+    assert data["items"] == []
+    assert data["page"]["total"] == 0
+    assert data["page"]["has_more"] is False
+
+
 # ── 路线 ────────────────────────────────────────────────────────────────────
 
 

@@ -149,6 +149,22 @@ class PlacePage(BaseModel):
     items: list[PlaceOut]
 
 
+class PlaceSearchOut(BaseModel):
+    """地点搜索的结果（PRD §7.2 ``GET /places/search``）。
+
+    与 ``PlacePage`` 一样带分页元信息，但**带上游的搜索词**：
+    调用方要能看出"我搜的是 A，回来的这条是 A 的别名命中"，
+    否则一次别名命中看起来就像"它怎么出现了"。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    query: str
+    city: str | None = None
+    page: PageMeta
+    items: list[PlaceOut]
+
+
 class CategoryStat(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

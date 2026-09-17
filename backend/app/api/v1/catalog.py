@@ -35,6 +35,7 @@ from app.schemas.catalog import (
     PlaceDetailOut,
     PlaceOut,
     PlacePage,
+    PlaceSearchOut,
     PreferenceDimensionOut,
     RouteOut,
     RouteStopOut,
@@ -284,6 +285,24 @@ async def city_stats(slug: str, db: AsyncSession = Depends(get_db)) -> dict[str,
 # ── 地点 ────────────────────────────────────────────────────────────────────
 
 
+def _name_match(q: str, *, city_id: uuid.UUID | None = None) -> Any:
+    """名称/别名模糊匹配的**唯一一份**谓词。
+
+    列表端点（``/cities/{slug}/places?q=``）与搜索端点（``/places/search``）都用它：
+    否则两处的"搜同一个词"会给出不同结果，而这种分歧从界面上看不出来。
+    """
+    pattern = f"%{q}%"
+    alias_ids = select(PlaceAlias.place_id).where(PlaceAlias.alias.ilike(pattern))
+    if city_id is not None:
+        alias_ids = alias_ids.where(PlaceAlias.city_id == city_id)
+    return or_(
+        Place.display_name.ilike(pattern),
+        Place.canonical_name.ilike(pattern),
+        Place.name_en.ilike(pattern),
+        Place.id.in_(alias_ids),
+    )
+
+
 def _place_query(city_id: uuid.UUID, *, q: str | None, category: str | None, district: str | None) -> Select[Any]:
     stmt = select(Place).where(Place.city_id == city_id, Place.status == "active")
     if category:
@@ -291,19 +310,7 @@ def _place_query(city_id: uuid.UUID, *, q: str | None, category: str | None, dis
     if district:
         stmt = stmt.where(Place.district == district)
     if q:
-        pattern = f"%{q}%"
-        stmt = stmt.where(
-            or_(
-                Place.display_name.ilike(pattern),
-                Place.canonical_name.ilike(pattern),
-                Place.name_en.ilike(pattern),
-                Place.id.in_(
-                    select(PlaceAlias.place_id).where(
-                        PlaceAlias.city_id == city_id, PlaceAlias.alias.ilike(pattern)
-                    )
-                ),
-            )
-        )
+        stmt = stmt.where(_name_match(q, city_id=city_id))
     return stmt
 
 
@@ -354,6 +361,61 @@ async def list_places(
         items=items,
     )
     return ok_envelope(page.model_dump(), ApiMeta())
+
+
+@router.get("/places/search")
+async def search_places(
+    q: str = Query(min_length=1, max_length=60, description="按名称/别名模糊搜索"),
+    city: str | None = Query(default=None, description="限定城市 slug；省略则搜全部已上线城市"),
+    limit: int = Query(default=20, ge=1, le=MAX_PAGE_SIZE),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """地点搜索（PRD §7.2）。与列表端点共用一份名称/别名谓词。
+
+    刻意不传 ``city`` 也能用：知识库里可能有多个城市的同义地点（"中山公园"广州就有 9 个），
+    而搜索结果里如果分不清"这是哪个城市的"，用户点了才发现找错了城市。
+    因此返回里带上 ``city`` 过滤条件本身，调用方可以据此显示"当前搜索范围"。
+    """
+    keyword = q.strip()
+    if not keyword:
+        raise AppError(
+            ErrorCode.INVALID_INPUT,
+            "搜索词不能只有空格",
+            hint="输入地点名或别名，例如「小蛮腰」。",
+        )
+
+    city_id: uuid.UUID | None = None
+    if city is not None:
+        city_id = (await _city_by_slug(db, city)).id
+
+    stmt = select(Place).where(Place.status == "active")
+    if city_id is not None:
+        stmt = stmt.where(Place.city_id == city_id)
+    stmt = stmt.where(_name_match(keyword, city_id=city_id))
+
+    total = int((await db.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one())
+    rows = (
+        await db.execute(
+            stmt.order_by(Place.popularity_score.desc().nulls_last(), Place.display_name).limit(limit)
+        )
+    ).scalars().all()
+
+    ids = [row.id for row in rows]
+    aliases = await _aliases_of(db, ids)
+    sources = await _sources_of(db, ids)
+    items = [
+        _place_out(row, aliases=aliases.get(row.id, []), sources=sources.get(row.id, []))
+        for row in rows
+    ]
+    out = PlaceSearchOut(
+        query=keyword,
+        city=city,
+        page=PageMeta(
+            total=total, limit=limit, offset=0, has_more=len(items) < total
+        ),
+        items=items,
+    )
+    return ok_envelope(out.model_dump(), ApiMeta())
 
 
 @router.get("/places/{place_id}")
