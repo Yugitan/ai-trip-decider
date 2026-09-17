@@ -1,12 +1,15 @@
 # TASKS.md — 任务清单与完成状态
 
-> 最后更新：2026-09-16
+> 最后更新：2026-09-17
 > 当前进度：**M0–M7 全部完成**（M0 脚手架 + M1 广州知识库 + M2 领域内核 +
 > M3 Provider 与检索链 + M4 规划编排与 API + **M5 前端结果页**：首页提交 → 三套方案时间线 /
 > 逐项对比表 → `/trip/{id}` 独立结果页 → 改路线 / 撤销 / 分享 / 分享页「复制这套路线」 /
 > 地图（需配 `NEXT_PUBLIC_AMAP_JS_KEY`）→ **分享页 OG 图 + JSON-LD（AC-9.5）** +
 > **M7 验收**：E2E（Playwright 16 场景）+ 异常注入 25 项 + **性能与安全检查**（`make perf`，
 > 一条命令重跑 p95 / 首屏 JS / LCP，门槛另有秒级回归测试守着）。
+> 2026-09-17 补齐三条主链路真身：**§13 联网搜索管线、FR-12 成本后台、FR-13 客户端上报与
+> error boundary**（外加 `/plan/[requestId]` 生成中页与逐天节奏/主题，见"搜索管线、
+> 成本后台与可观测性收尾"一节）。
 > 下一步：M8（交付报告）。M6 的 B1/B2 数据缺口已于 2026-09-15 补齐（Overpass 经 `maps.mail.ru` 镜像可用）；
 > 关系图与三份文档已于 2026-09-16 重算对齐（见"关系图报告的可归因性"一节）。
 
@@ -1108,6 +1111,46 @@ make relations OSRM=1   # 5445 对 → osrm 4085 / estimated 1360 · 32 批 · 0
    它决定了结果页怎么排版、分享页怎么算时长。
 3. **天与天之间不做"地理位置渐进"**（第 1 天老城区、第 2 天河南岛……）：
    现在每天各自优选，不保证两天在地理上"一天比一天远"。想要它得引入分区约束，属另一项功能。
+
+---
+
+## 搜索管线、成本后台与可观测性收尾（2026-09-17）
+
+> 范围：PRD 里三条一直只挂着"接口"的主链路补上真身 —— §13 联网搜索管线、
+> FR-12 成本后台、FR-13 客户端错误上报与 error boundary；外加 `/plan/[requestId]`
+> 生成中页面（§5.3）与逐天节奏/主题的前端表单。
+> 结果：后端 **1143 → 1257**，前端 **394 → 448**，`make check` 全绿，`make e2e` 19 passed。
+
+### 交付
+
+| # | 任务 | 状态 | 证据 |
+| --- | --- | --- | --- |
+| S1 | 搜索管线（PRD §13.2/§13.3/§13.4） | ✅ | `app/services/search_pipeline.py`：决策树 `decide_triggers` 五种触发（顺序即优先级），默认路径一次都不搜；查询预算来自 `ttl.yaml` 的 `search_budget`，全局硬上限 `search_max_queries_per_plan`；抽取结果只做三件事：一致→提 `confidence`、冲突→标 `conflicting` 并保留双方来源、库外→登记为线索（**不编坐标入池**，差异写在 `SearchEvidence.leads_note()`） |
+| S2 | 成本后台 API（FR-12 AC-12.2） | ✅ | `app/api/v1/admin.py`：Token 级（`hmac.compare_digest`）+ 来源级（未配 Token 时仅本机）双护栏；单次规划成本按 `request_id` 聚合出 P50/P95（不是行平均，见问题 79 的延续）；`within_target` 由后端算一次，且未校准窗口直接返回 `null`（"金额不可信时「低于红线」是一句没有根据的话"） |
+| S3 | 成本后台前端 | ✅ | `app/admin/cost` + `components/admin-cost-dashboard.tsx`：Token 输入、按类别/Provider 明细、P50/P95 与红线对比、未校准标注 |
+| S4 | 客户端上报端点（FR-11.5 / FR-13.5） | ✅ | `app/api/v1/reports.py`：`/feedback` 与 `/errors`。限流按 IP 哈希、长度上限来自 `limits.yaml`（超长 422 说清楚而不是悄悄截断）、引用不存在的 trip/place 返回 404 而不是撞外键变 500、上下文逐键 `scrub` 脱敏 |
+| S5 | 前端 error boundary（FR-13.1） | ✅ | `app/error.tsx` + `app/global-error.tsx` + `lib/use-error-report.ts`：上报逻辑只写一份（两个 boundary 各写一遍的下场是一边带 `digest` 另一边忘）；`digest` 作为用户↔日志的关联键必须一起上报 |
+| S6 | `/plan/[requestId]` 生成中页面（§5.3/§7.1） | ✅ | `components/plan-progress.tsx` + `lib/plan-stream.ts`：四阶段按**真实后端事件**推进，不做假进度条；8s/20s 超时文案说实话；`plan.completed` 后不自动跳走（结果页没有 `meta.llm`，立刻跳走用户就看不到它了）。SSE 封装可注入 `EventSource`，jsdom 可测 |
+| S7 | 偏好/主题跨语言契约 | ✅ | `lib/preferences.ts`：界面标签 ↔ api 枚举的单一出处（`planner-form` 与 `trip-result` 共用，避免 import 环）；跨语言契约测试拿 `config/scoring.yaml` 现场比对 |
+| S8 | 逐天节奏与主题（表单） | ✅ | 节奏/主题改为**按天**的分组控件（配合多日行程，问题 90 的前端半边）；E2E-03 改用 `selectOption` 的 **value** 而不是带表情的文字 |
+| S9 | CI：密钥扫描 + 独立 E2E job | ✅ | `ci.yml`：gitleaks 固定 8.30.1 + SHA256 校验和 + `fetch-depth: 0`（浅克隆扫不出来）；`make e2e` 单独 job gate 在 check 之后（真浏览器慢一个量级，红了能一眼看出是哪一半） |
+| S10 | `.gitleaks.toml` 字面量级白名单 | ✅ | 默认规则集会报 `test_logging.py` 里**故意**的两条假 Key（脱敏测试语料）；只放行那两个字符串本身，**不按路径放行**（那等于宣布该文件以后可以随便提交明文 Key） |
+
+### 本轮发现并修复的问题
+
+96. **admin 分位数测试依赖数据库历史**：`test_plan_cost_stats_group_by_request_not_by_row`
+    对**整表**断言 p50/max，但测试库跨运行持久 —— 上次中断的运行在 `cost_logs`
+    留下的 3 笔 0 元 + 1 笔 0.0576 元历史规划把 p50 拉成了 0.0（断言 `p50 ∈ {0.06, 0.30}` 失败）。
+    被测代码没有错，错的是测试假设了"表里只有我插的行"。修法：新增
+    `isolated_cost_logs` 夹具（快照 → 清空 → 测完连 id、created_at 一起原样恢复），
+    不放宽断言；连跑两次验证结果不再依赖历史。
+
+### 本轮验证
+
+```bash
+make check     # 后端 1257 passed · 前端 448 passed · ruff/mypy/tsc/gitleaks/bandit/pip-audit 全绿
+make e2e       # 19 passed（含 Pixel 7 / iPhone 14 两档移动端）
+```
 
 ---
 
