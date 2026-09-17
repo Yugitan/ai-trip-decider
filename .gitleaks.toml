@@ -2,13 +2,16 @@
 #
 # ★ 为什么需要这个文件 ★
 #
-# 默认规则集会在 `backend/tests/unit/test_logging.py` 上报两个 `generic-api-key`：
-# 那里**故意**放着两条假 Key（`sk-abcdef1234567890abcdef`、
-# `AKIAIOSFODNN7EXAMPLE` —— 后者是 AWS 文档里的示例串），
-# 用来断言「日志脱敏会把 Key 从日志行里打掉」。这是必须留着的一类回归夹具：
-# 删了它，脱敏逻辑就再也没有测试；把它写进路径白名单，又会连真 Key 一起放过。
+# 默认规则集会在测试夹具上报三个 `generic-api-key`：
+# - `backend/tests/unit/test_logging.py` 的两条（`sk-abcdef1234567890abcdef`、
+#   `AKIAIOSFODNN7EXAMPLE` —— 后者是 AWS 文档里的示例串），
+#   用来断言「日志脱敏会把 Key 从日志行里打掉」；
+# - `backend/tests/unit/test_reports_schema.py` 的一条（`sk-1234567890abcdefgh`），
+#   用来断言「/errors 上报的 context 里的 api_key 同样会被 _sanitize_context 脱敏」。
+# 这些是必须留着的一类回归夹具：删了它们，脱敏逻辑就再也没有测试；
+# 把它们写进路径白名单，又会连真 Key 一起放过。
 #
-# 所以这里只做**字面量级**的白名单 —— 精确到那两个假串本身，而不是整个文件或整条规则。
+# 所以这里只做**字面量级**的白名单 —— 精确到那几个假串本身，而不是整个文件或整条规则。
 # 危险的是「按路径放行」：那等于宣布这个文件以后可以随便提交明文 Key。
 #
 # 跑法：`make security`（本机装了 gitleaks 二进制时自动用真身，否则回退到模式扫描）；
@@ -22,4 +25,5 @@ regexTarget = "match"
 regexes = [
   '''sk-abcdef1234567890abcdef''',
   '''AKIAIOSFODNN7EXAMPLE''',
+  '''sk-1234567890abcdefgh''',
 ]
