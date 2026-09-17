@@ -30,7 +30,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from datetime import time as dt_time
 from typing import Any
 
@@ -49,23 +49,31 @@ from app.core.config import (
     get_settings,
     get_ttl_config,
 )
-from app.core.errors import AppError, ErrorCode
+from app.core.errors import AppError, ErrorCode, ProviderError
 from app.core.faults import fault_active
 from app.core.logging import get_logger, scrub
 from app.db.models import City, Place, Trip, TripRequest, TripRoute, TripRouteStop
 from app.domain.budget import estimate_route_budget
-from app.domain.candidates import Candidate, select_candidates, stay_duration_min
+from app.domain.candidates import (
+    Candidate,
+    matches_theme,
+    select_candidates,
+    stay_duration_min,
+    theme_coverage,
+)
 from app.domain.feasibility import FeasibilityReport, Violation, validate_route, weekday_of
 from app.domain.intent import parse_intent
 from app.domain.models import (
     ArchetypeName,
     BudgetSpec,
     Constraint,
+    DayPlan,
     Intent,
     ParseResult,
     RelationIndex,
     RoutePlan,
     Stop,
+    WeatherCondition,
     hhmm_to_minutes,
     route_metrics,
 )
@@ -75,6 +83,7 @@ from app.domain.models import (
 from app.domain.planner import day_window, effective_walking_cap, plan_routes
 from app.domain.scoring import ScoreBreakdown, dimension_score, score_route
 from app.domain.transit import leg_between
+from app.providers.base import LatLng
 from app.providers.registry import Providers
 from app.schemas.trips import PlanRequest
 from app.services.cache import CacheStore, params_hash
@@ -99,7 +108,8 @@ from app.services.llm_planner import (
 )
 from app.services.rate_limit import RateLimiter
 from app.services.retrieval_chain import RetrievalChain, RetrievalQuery
-from app.services.retrieval_layers import CacheLayer, LlmLayer
+from app.services.retrieval_layers import CacheLayer, LlmLayer, SearchLayer
+from app.services.search_pipeline import SearchEvidence, SearchPipeline
 
 __all__ = [
     "ARCHETYPES",
@@ -239,6 +249,127 @@ def _on_day(entry: _ScoredPlan, day: int) -> _ScoredPlan:
     return replace(entry, plan=replace(entry.plan, stops=tuple(s.on_day(day) for s in entry.plan.stops)))
 
 
+def _theme_label(theme: str, scoring: ScoringConfig) -> str:
+    """主题的界面叫法（复用偏好维度自己的 label，不另维护一份中文表）。"""
+    dimension = scoring.preference_dimensions.get(theme)
+    return dimension.label if dimension is not None else theme
+
+
+def _active_theme(intent: Intent, day: int) -> str | None:
+    """第 ``day`` 天**真正生效**的主题（没设 / 被否掉时是 ``None``）。
+
+    用户在补充要求里说过"不要文化"时（该维度权重为 0），主题**不生效**：那是另一句
+    更明确的否定，不该被一个下拉框静默压过去。这种冲突会在「需要留意」里说明。
+    """
+    theme = intent.plan_for_day(day).theme
+    if theme is None:
+        return None
+    if intent.preferences.get(theme, 1.0) <= 0:
+        return None
+    return theme
+
+
+def _theme_notes(
+    intent: Intent,
+    days: Sequence[_ScoredPlan],
+    *,
+    limits: LimitsConfig,
+    scoring: ScoringConfig,
+) -> tuple[Violation, ...]:
+    """主题日的如实汇报：哪一天没按主题排、或只凑到了几个主题站点。
+
+    ★ 为什么量的是**排出来的站点**而不是当初的池子 ★ "主题池够不够"是我们内部的
+    判断，用户要的是"这一天到底有几个文化站点"。两个数字在模板路线、
+    ``min_route_stops`` 补齐、可行性剪枝之后并不总是相等 —— 报告只该写后者。
+    """
+    notes: list[Violation] = []
+    min_ratio = limits.planning.theme_day.min_ratio
+    for entry in days:
+        stops = entry.plan.stops
+        if not stops:
+            continue
+        day = stops[0].day
+        wanted = intent.plan_for_day(day).theme
+        if wanted is None:
+            continue
+        label = _theme_label(wanted, scoring)
+        if _active_theme(intent, day) is None:
+            notes.append(
+                Violation(
+                    code="THEME_IGNORED",
+                    severity="soft",
+                    at_seq=None,
+                    message=(
+                        f"第 {day} 天选了「{label}」主题，但你在补充要求里说了不要{label}"
+                        f"—— 这一天没有按主题排"
+                    ),
+                    detail={"day": day, "theme": wanted, "reason": "negated_by_free_text"},
+                )
+            )
+            continue
+        matched, total = theme_coverage(stops, wanted, scoring)
+        if total and matched / total < min_ratio:
+            notes.append(
+                Violation(
+                    code="THEME_SHORTFALL",
+                    severity="soft",
+                    at_seq=None,
+                    message=(
+                        f"第 {day} 天想排「{label}」，但只凑到 {matched}/{total} 个{label}站点"
+                        f"（低于 {min_ratio:.0%}）"
+                    ),
+                    detail={
+                        "day": day,
+                        "theme": wanted,
+                        "matched": matched,
+                        "total": total,
+                        "min_ratio": min_ratio,
+                    },
+                )
+            )
+    return tuple(notes)
+
+
+def _intent_with_day_themes(intent: Intent) -> Intent:
+    """把**主题日用到的维度**并进候选池的偏好权重（其它字段不变）。
+
+    ★ 为什么候选池也必须知道主题 ★ 候选集在这一步就截断到 ``candidate_max``（80），
+    排序用的是全局偏好。如果第 2 天的主题没被勾在全局偏好里，那一天要的地点可能
+    **从头到尾就没进候选池** —— 实测"第 2 天：夜景"排出来 0/3 个夜景站点，
+    只能在「需要留意」里说"没凑到"，而其实库里是有夜景地点的。
+    主题是用户显式说过的需求，所以它得从挑候选这一步就参与进来。
+
+    只**增加**维度，不改已有权重：候选池变宽，而每一天最终排什么仍由
+    :func:`_intent_for_day` 决定。
+    """
+    themes = {
+        _active_theme(intent, day) for day in range(1, max(1, intent.days) + 1)
+    }
+    missing = {
+        theme: 1.0
+        for theme in themes
+        if theme is not None and theme not in intent.preferences
+    }
+    if not missing:
+        return intent
+    return replace(intent, preferences={**intent.preferences, **missing})
+
+
+def _intent_for_day(intent: Intent, day: int) -> Intent:
+    """把某一天的节奏与主题套到意图上（其余字段不变）。
+
+    这是"按天设置"与规划管线之间**唯一**的接缝：往下走的所有东西
+    （停留时长、步行上限、候选打分、推荐理由）都只认 ``intent``，
+    所以它们自动跟着那一天走，不需要各自开个参数。
+    """
+    plan = intent.plan_for_day(day)
+    theme = _active_theme(intent, day)
+    preferences = dict(intent.preferences)
+    if theme is not None:
+        preferences[theme] = max(preferences.get(theme, 0.0), 1.0)
+    return replace(intent, pace=plan.pace, preferences=preferences)
+
+
 def _best_of(entries: Sequence[_ScoredPlan]) -> _ScoredPlan:
     """一组候选里总分最高的那套。
 
@@ -248,12 +379,26 @@ def _best_of(entries: Sequence[_ScoredPlan]) -> _ScoredPlan:
     return max(entries, key=lambda item: (item.breakdown.total, tuple(item.plan.place_ids)))
 
 
-def _merge_days(days: Sequence[_ScoredPlan], intent: Intent, limits: LimitsConfig) -> _ScoredPlan:
-    """把同一 archetype 的各日行程合成**一套多日方案**（站点自带 ``day`` 标签）。"""
+def _merge_days(
+    days: Sequence[_ScoredPlan],
+    intent: Intent,
+    limits: LimitsConfig,
+    *,
+    notes: Sequence[Violation] = (),
+) -> _ScoredPlan:
+    """把同一 archetype 的各日行程合成**一套多日方案**（站点自带 ``day`` 标签）。
+
+    ``notes`` 是"按天设置没做到"的那几句话（主题日凑不满等）。它们不是单日可行性
+    校验的产物（校验只看那一天自己的站点），所以只能在这里并入报告 —— 附带它们的
+    报告会走到缓存与数据库，前端在「需要留意」与整条路线提示里读到的就是它们。
+    """
     if not days:
         raise ValueError("没有可合并的日程")
     stops = tuple(stop for entry in days for stop in entry.plan.stops)
     head = days[0]
+    report = _merge_reports([entry.report for entry in days], stops)
+    if notes:
+        report = replace(report, warnings=(*report.warnings, *notes))
     return _ScoredPlan(
         plan=RoutePlan(
             archetype=head.archetype,
@@ -264,7 +409,7 @@ def _merge_days(days: Sequence[_ScoredPlan], intent: Intent, limits: LimitsConfi
             budget=estimate_route_budget(stops, intent, limits.budget),
         ),
         archetype=head.archetype,
-        report=_merge_reports([entry.report for entry in days], stops),
+        report=report,
         breakdown=_merge_score_breakdown([entry.breakdown for entry in days]),
         source=head.source,
         template_route_id=head.template_route_id,
@@ -288,6 +433,13 @@ def intent_to_dict(intent: Intent) -> dict[str, Any]:
         "people": intent.people,
         "preferences": {k: float(v) for k, v in intent.preferences.items()},
         "pace": intent.pace,
+        # 按天设置必须进快照：否则复盘一个"为什么第 2 天全是文化站点"时，
+        # 快照里只剩一个全局 pace，看不出那天单独选过什么（也与 days 一样：
+        # 用户请求的天数与实际排出来的天数要分得清）。
+        "day_plans": [
+            {"day": index, "pace": plan.pace, "theme": plan.theme}
+            for index, plan in enumerate(intent.day_plans, start=1)
+        ],
         "budget": {
             "amount": None if intent.budget.amount is None else str(intent.budget.amount),
             "scope": intent.budget.scope,
@@ -317,6 +469,12 @@ def _form_summary(payload: PlanRequest) -> dict[str, Any]:
         "people": payload.people,
         "preferences": list(payload.preferences),
         "pace": payload.pace,
+        # 按天设置也要给模型看：否则模型不知道"用户已经说了第 2 天玩文化"，
+        # 可能在补全偏好时把主题压下去。
+        "day_plans": [
+            {"day": index, "pace": plan.pace, "theme": plan.theme}
+            for index, plan in enumerate(payload.day_plans, start=1)
+        ],
         "budget": budget,
         "start_time": payload.start_time,
         "end_time": payload.end_time,
@@ -369,6 +527,30 @@ def build_intent(
             hint=f"合法偏好：{', '.join(sorted(scoring.preference_dimensions))}",
         )
 
+    # 主题取用的也是偏好维度（同一个语汇，不做第二套词表）。
+    unknown_themes = sorted(
+        {
+            plan.theme
+            for plan in payload.day_plans
+            if plan.theme is not None and plan.theme not in scoring.preference_dimensions
+        }
+    )
+    if unknown_themes:
+        raise AppError(
+            ErrorCode.INVALID_INPUT,
+            f"未知主题：{', '.join(unknown_themes)}",
+            hint=f"主题取的是偏好维度：{', '.join(sorted(scoring.preference_dimensions))}",
+        )
+    if len(payload.day_plans) > payload.days:
+        # 多出来的那几天永远不会被排到（行程就那么多天）。静默截断的话，用户会以为
+        # 自己设了 3 天而实际只有 1 天生效 —— 不如直接说他多设了。
+        raise AppError(
+            ErrorCode.INVALID_INPUT,
+            f"按天设置给了 {len(payload.day_plans)} 天，但行程只有 {payload.days} 天",
+            hint="要么把天数改成对应的天数，要么删掉多余的按天设置。",
+            context={"day_plans": len(payload.day_plans), "days": payload.days},
+        )
+
     default_start = limits.planning.default_window["start"]
     default_end = limits.planning.default_window["end"]
     start_min = _parse_time(payload.start_time, field_name="start_time") or hhmm_to_minutes(default_start)
@@ -392,6 +574,9 @@ def build_intent(
         people=payload.people,
         preferences=dict.fromkeys(payload.preferences, 1.0),
         pace=payload.pace,
+        day_plans=tuple(
+            DayPlan(pace=plan.pace, theme=plan.theme) for plan in payload.day_plans
+        ),
         budget=budget,
         start_min=start_min,
         end_min=end_min,
@@ -505,6 +690,12 @@ class PlanService:
             people=intent.people,
             preferences=tuple(intent.active_preferences),
             pace=intent.pace,
+            # 按天设置必须是键的一部分：两趟"节奏/主题分配不同"的行程若共用一个键，
+            # 第二趟会直接拿到第一趟的路线（幂等重放与缓存都按这个键）。
+            day_plans=tuple(
+                f"{index}:{plan.pace}:{plan.theme or '-'}"
+                for index, plan in enumerate(intent.day_plans, start=1)
+            ),
             budget_scope=intent.budget.scope,
             budget_amount=intent.budget.amount,
             start_time=_hhmm(intent.start_min),
@@ -546,7 +737,12 @@ class PlanService:
             )
 
         candidate_set = select_candidates(
-            places, intent, constraints, scoring=self.scoring, limits=self.limits
+            places,
+            # 主题日要的地点必须有机会进候选池（见 ``_intent_with_day_themes``）。
+            _intent_with_day_themes(intent),
+            constraints,
+            scoring=self.scoring,
+            limits=self.limits,
         )
         candidates = candidate_set.items
         await self._emit(
@@ -571,6 +767,23 @@ class PlanService:
                 },
             )
 
+        # ★ 联网搜索（PRD §13.2–§13.4）★
+        # 位置刻意在这里：候选集已定（决策树要用“候选够不够”），但路线还没排。
+        # 修改请求（``parent_trip`` 非空）**一次都不搜** —— 这是 PRD §13.2 的硬要求
+        # （“为路线微调触发搜索 → search 调用数必须为 0”）。
+        search_evidence = await self._search(
+            chain=chain,
+            planner=planner,
+            ledger=ledger,
+            city_name=city.name,
+            intent=intent,
+            payload=payload,
+            parsed=parsed,
+            candidates=tuple(candidate.place for candidate in candidates),
+            allow_search=parent_trip is None,
+        )
+        degraded.extend(search_evidence.notes)
+
         place_ids = [c.place.id for c in candidates]
         template_outcome = await chain.resolve(
             RetrievalQuery(kind=KIND_ROUTE_TEMPLATES, key=city.slug, payload={})
@@ -583,11 +796,13 @@ class PlanService:
         if template_outcome.degraded or relation_outcome.degraded:
             degraded.append("retrieval:partial(部分检索层失败，已降级)")
 
-        walking_cap = effective_walking_cap(intent, constraints, self.limits)
         weekday = weekday_of(intent.travel_date)
 
+        # 步行上限**不在这里算**：它含节奏（``walking_caps_m[pace]``），而节奏是逐天
+        # 设置的，所以由 ``_compose_itineraries`` 按天各算一份。
+        weather_by_day = await self._weather_for_days(city, intent, degraded)
         scored, composed_days = self._compose_itineraries(
-            candidates, templates, intent, constraints, relations, walking_cap, weekday
+            candidates, templates, intent, constraints, relations, weekday, weather_by_day
         )
         if intent.days > 1 and composed_days < intent.days:
             # 天数不够不是内部错误，是**素材不够**：如实说出来，别让标题写两天、
@@ -604,7 +819,9 @@ class PlanService:
                 70,
                 # 只报"通过校验的方案数"：``_score_plan`` 已经把不可行的方案丢掉了，
                 # 再报一个 checked 等于声称"所有尝试过的方案都通过了"。
-                {"feasible": len(scored), "days": composed_days},
+                # ``search`` 把“这次到底联没联网”连同触发原因一起报出来：
+                # 用户能不能复现一套方案，取决于他知道这次用了哪些数据。
+                {"feasible": len(scored), "days": composed_days, "search": search_evidence.summary()},
             ),
         )
         selected = self._select(scored)
@@ -623,7 +840,18 @@ class PlanService:
 
         await self._emit(
             on_progress,
-            PlanProgress(4, "compose", f"生成 {len(selected)} 套方案", 90, {"routes": len(selected)}),
+            PlanProgress(
+                4,
+                "compose",
+                f"生成 {len(selected)} 套方案",
+                90,
+                {
+                    "routes": len(selected),
+                    # 天气只影响偏好权重（雨天/高温加成），如实报出来：
+                    # "这次用没用天气"是一个用户能不能复现方案的关键变量。
+                    "weather": {str(day): condition for day, condition in weather_by_day.items()},
+                },
+            ),
         )
 
         # 方案叙事：只改写文案，不动任何数字；失败/不合格的文案由模板兜底。
@@ -908,8 +1136,62 @@ class PlanService:
                 # 未配 Key 时它是 NullLlmProvider，会抛 PROVIDER_UNAVAILABLE →
                 # 由链记一次失败并让上层降级到规则引擎（PRD §15.5）。
                 LlmLayer(provider=self.providers.llm, ledger=ledger),
+                # L8：实时联网搜索。**它不是被链自动驱动的** —— 链上的 L1/L3/L4 会
+                # 先满足常规需求，只有 ``SearchPipeline`` 按 PRD §13.4 的决策树
+                # 主动发起 KIND_SEARCH 查询时才会走到这里（所以它在链尾）。
+                # 未配 Key 时它是 SeedOnlyProvider（返回空列表），由管线在
+                # 触发阶段就直接跳过，不会产生“查了但没结果”的假账。
+                SearchLayer(provider=self.providers.search, ledger=ledger),
             ]
         )
+
+    async def _search(
+        self,
+        *,
+        chain: RetrievalChain,
+        planner: LlmPlanner,
+        ledger: CostLedger,
+        city_name: str,
+        intent: Intent,
+        payload: PlanRequest,
+        parsed: ParseResult,
+        candidates: Sequence[DomainPlace],
+        allow_search: bool,
+    ) -> SearchEvidence:
+        """按 PRD §13.4 决定要不要联网，并把结果落库（§13.3）。
+
+        ★ 搜索失败绝不影响规划 ★ 与天气同一口径：联网搜索只做“佐证与线索”，
+        不参与任何硬约束，所以异常一律吞掉并写成降级说明（PRD §15.5）。
+        """
+        if not allow_search:
+            return SearchEvidence(provider=self.providers.search.name)
+
+        pipeline = SearchPipeline(
+            chain=chain,
+            db=self.db,
+            planner=planner,
+            ledger=ledger,
+            scoring=self.scoring,
+            limits=self.limits,
+            ttl=self.ttl,
+            provider_name=self.providers.search.name,
+            # SeedOnlyProvider（无 Key）不算可用：它只会返回空列表，
+            # 拿它去“搜”等于花钱记一条假账（PRD §15.5 降级矩阵）。
+            provider_available=self.providers.search.health().available,
+        )
+        try:
+            return await pipeline.run(
+                city_name=city_name,
+                intent=intent,
+                free_text=payload.free_text,
+                unparsed=parsed.unparsed,
+                candidates=candidates,
+            )
+        except Exception:
+            log.warning("联网搜索管线异常，已跳过（不影响方案生成）", exc_info=True)
+            evidence = SearchEvidence(provider=self.providers.search.name)
+            evidence.notes.append("search:error(联网搜索失败，方案基于本地知识库生成)")
+            return evidence
 
     async def _resolve_places(
         self, chain: RetrievalChain, city: City, degraded: list[str]
@@ -918,6 +1200,59 @@ class PlanService:
         if outcome.degraded:
             degraded.append("retrieval:L1(知识库查询降级)")
         return list(outcome.value or [])
+
+    async def _weather_for_days(
+        self, city: City, intent: Intent, degraded: list[str]
+    ) -> dict[int, WeatherCondition]:
+        """按出行日期取天气，返回"第几天 → 天气"（PRD §10.1）。
+
+        ★ 什么情况下**不**取（而且说出来）★
+        - **没填出行日期**：我们不知道那是哪一天，拿"今天的天气"去调整一个没指定日期
+          的行程就是编一个依据。记一条 ``weather:no_date``，而不是悄悄按晴天算。
+        - **城市没有质心坐标**：连问哪个点都不知道。
+        - **出行日期超出预报范围**（open-meteo 最多 16 天）：如实记 ``weather:out_of_range``。
+        - **用户显式表示不受天气影响**（``weather_sensitive=False``）：那就真的不取。
+
+        ★ 失败不阻断 ★ 天气只影响偏好权重（``M_weather`` 乘数），不参与任何硬约束，
+        所以任何失败都只记一条降级说明，行程照常生成（PRD §15.5 降级矩阵）。
+
+        ★ 不记账 ★ open-meteo 免费且无需 Key，没有单价可记；
+        它是**唯一**一个不产生 ``cost_logs`` 的外部调用，这一点写在能力说明里。
+        """
+        if not intent.weather_sensitive:
+            return {}
+        if intent.travel_date is None:
+            degraded.append("weather:no_date(未填出行日期，不按天气调整偏好)")
+            return {}
+        if city.centroid_lat is None or city.centroid_lng is None:
+            degraded.append("weather:no_centroid(城市缺少中心坐标)")
+            return {}
+        try:
+            start = date.fromisoformat(intent.travel_date)
+        except ValueError:
+            degraded.append("weather:bad_date(出行日期无法解析)")
+            return {}
+
+        horizon = max(1, intent.days)
+        try:
+            snapshots = await self.providers.weather.forecast(
+                LatLng(lat=float(city.centroid_lat), lng=float(city.centroid_lng)),
+                days=horizon,
+            )
+        except ProviderError as exc:
+            # 天气挂了不影响排路线 —— 但也不能装作今天是晴天
+            degraded.append(f"weather:unavailable({exc.code})")
+            return {}
+
+        by_date = {snapshot.date: snapshot.condition for snapshot in snapshots}
+        picked: dict[int, WeatherCondition] = {}
+        for day in range(1, horizon + 1):
+            condition = by_date.get((start + timedelta(days=day - 1)).isoformat())
+            if condition is not None:
+                picked[day] = condition
+        if not picked:
+            degraded.append("weather:out_of_range(出行日期超出预报范围)")
+        return picked
 
     def _compose(
         self,
@@ -928,6 +1263,7 @@ class PlanService:
         relations: RelationIndex,
         walking_cap: int,
         weekday: int | None,
+        weather: WeatherCondition | None = None,
         archetypes: Sequence[ArchetypeName] = ARCHETYPES,
     ) -> list[_ScoredPlan]:
         """束搜索 + 模板复用，产出**已通过可行性校验**的方案（含评分）。
@@ -935,6 +1271,10 @@ class PlanService:
         ``archetypes`` 限定只排哪几种：多日行程要按（archetype × 天）分别组合，
         而每天的候选池不同（排除了前几天用过的地点），所以不能再一次性排完。
         默认仍是全部三种，单日调用方的行为不变。
+
+        ``weather`` 是**那一天**的天气（PRD §10.1）：雨天/高温会改偏好权重，
+        所以它必须跟着"第几天"走 —— 把一趟三天行程按同一种天气打分，
+        等于替后两天的天气做了个假设。
         """
         by_id = {c.place.id: c for c in candidates}
         scored: list[_ScoredPlan] = []
@@ -946,15 +1286,16 @@ class PlanService:
             entry = self._score_plan(
                 plan,
                 template.archetype if template.archetype in ARCHETYPES else "classic",
-                intent,
-                constraints,
-                relations,
-                walking_cap,
-                weekday,
-                source="template",
-                template_route_id=uuid.UUID(template.route_id),
-                theme=template.name,
-            )
+                    intent,
+                    constraints,
+                    relations,
+                    walking_cap,
+                    weekday,
+                    weather,
+                    source="template",
+                    template_route_id=uuid.UUID(template.route_id),
+                    theme=template.name,
+                )
             if entry is not None:
                 scored.append(entry)
 
@@ -967,6 +1308,10 @@ class PlanService:
                 limits=self.limits,
                 scoring=self.scoring,
                 archetype=archetype,
+                # 束搜索内部也会按同一套权重给候选打分排序，所以天气要一起传：
+                # 只在这里补一次（下面``_score_plan``）会让"搜出来的路径"与"最终评的分数"
+                # 用两种天气假设，排序与分数对不上。
+                weather=weather,
             ):
                 entry = self._score_plan(
                     plan,
@@ -976,6 +1321,7 @@ class PlanService:
                     relations,
                     walking_cap,
                     weekday,
+                    weather,
                     source="generated",
                 )
                 if entry is not None:
@@ -1022,6 +1368,7 @@ class PlanService:
         relations: RelationIndex,
         walking_cap: int,
         weekday: int | None,
+        weather: WeatherCondition | None = None,
         *,
         source: str,
         template_route_id: uuid.UUID | None = None,
@@ -1048,6 +1395,7 @@ class PlanService:
             relations=relations,
             budget=budget,
             walking_cap_m=walking_cap,
+            weather=weather,
         )
         return _ScoredPlan(
             plan=RoutePlan(archetype=archetype, stops=plan.stops, theme=theme, budget=budget),
@@ -1066,8 +1414,8 @@ class PlanService:
         intent: Intent,
         constraints: Sequence[Constraint],
         relations: RelationIndex,
-        walking_cap: int,
         weekday: int | None,
+        weather_by_day: Mapping[int, WeatherCondition] | None = None,
     ) -> tuple[list[_ScoredPlan], int]:
         """按天顺序组合：第 N 天只在**前 N-1 天没用过的地点**里排。
 
@@ -1112,20 +1460,37 @@ class PlanService:
         day_plans: dict[tuple[ArchetypeName, int], list[_ScoredPlan]] = {}
         used_by_archetype: dict[ArchetypeName, set[str]] = {}
         for day in range(1, target_days + 1):
+            # ★ 每一天用自己的节奏与主题 ★ 这是"按天设置"真正落地的一行：
+            # 节奏换掉之后，停留时长（``stay_duration_min``）、步行上限与评分权重都跟着变，
+            # 所以不能只换标签。
+            day_intent = _intent_for_day(intent, day)
+            day_cap = effective_walking_cap(day_intent, constraints, self.limits)
+            theme = _active_theme(intent, day)
             for archetype in ARCHETYPES:
                 used = used_by_archetype.setdefault(archetype, set())
                 pool = [c for c in candidates if c.place.id not in used]
                 if len(pool) < self.limits.planning.candidate_min:
                     continue
+                if theme is not None:
+                    focused = [
+                        c for c in pool if matches_theme(c.place, theme, self.scoring)
+                    ]
+                    # 主题池太小就不用它：拿一个只有 3 个地点的池子去排那一天，
+                    # 连 ``min_route_stops`` 都凑不满 —— 等于把用户的行程砍掉一天。
+                    # 退回完整池子，并在事后把"实际凑到几个主题站点"写进报告。
+                    if len(focused) >= self.limits.planning.theme_day.min_pool:
+                        pool = focused
                 # 模板路线只用在第一天：它是"别人的一天"，套到第二天会与第一天撞站。
                 day_scored = self._compose(
                     pool,
                     templates_by_archetype.get(archetype, []) if day == 1 else [],
-                    intent,
+                    day_intent,
                     constraints,
                     relations,
-                    walking_cap,
+                    day_cap,
                     weekday,
+                    # 那一天自己的天气（没有就是 None：不拿别的天的天气代替）
+                    None if weather_by_day is None else weather_by_day.get(day),
                     archetypes=(archetype,),
                 )
                 if not day_scored:
@@ -1156,7 +1521,18 @@ class PlanService:
                     if not options:
                         break
                     branch.append(_on_day(_best_of(options), day))
-                itineraries.append(_merge_days(branch, intent, self.limits))
+                itineraries.append(
+                    _merge_days(
+                        branch,
+                        intent,
+                        self.limits,
+                        # 主题日凑不满时必须在报告里说出来，而"凑到几个"要看**真的**
+                        # 排出来的站点（不是我们当初以为自己排了什么）。
+                        notes=_theme_notes(
+                            intent, branch, limits=self.limits, scoring=self.scoring
+                        ),
+                    )
+                )
 
         composed_days = max((item.plan.metrics.days for item in itineraries), default=0)
         return itineraries, composed_days
@@ -1411,7 +1787,11 @@ class PlanService:
                         transport_min=stop.leg_to_next.minutes if stop.leg_to_next else None,
                         transport_distance_m=stop.leg_to_next.distance_m if stop.leg_to_next else None,
                         transport_source=stop.leg_to_next.source if stop.leg_to_next else None,
-                        why_recommended=_stop_why(stop.place, intent, self.scoring),
+                        # 理由按**那一天**的意图算：主题日里出现「美食 0.90」的徽章会让人
+                        # 以为主题没生效（而它其实只影响那一天），所以逐天算一遍。
+                        why_recommended=_stop_why(
+                            stop.place, _intent_for_day(intent, stop.day), self.scoring
+                        ),
                         tips=None,
                         source_refs=snapshot.get("source_refs"),
                         warnings=stop_warnings,
@@ -1672,8 +2052,13 @@ def _pros(item: _ScoredPlan) -> list[str]:
     return [f"{DIMENSION_LABELS.get(key, key)}（{value:.2f}）" for key, value in top]
 
 
+#: 与**用户显式选择**直接有关的提示（按天设的主题）。它们必须出现在「需要留意」里：
+#: 用户选了一件事，就欠他一句交代 —— 不能被前面三条通用告警挤出前 3 条。
+_PRIORITY_NOTES: frozenset[str] = frozenset({"THEME_IGNORED", "THEME_SHORTFALL"})
+
+
 def _cons(item: _ScoredPlan) -> list[str]:
-    """「需要留意」取前 3 条**互不相同**的提示。
+    """「需要留意」取前 3 条**互不相同**的提示，主题日的交代排最前。
 
     ★ 为什么必须去重 ★ 营业时间类提示是**按站点**逐条产生的：三个站点都没填
     出行日期时会产生三条**文本完全一样**的告警（区分哪一站的信息在 ``detail.place``
@@ -1681,7 +2066,14 @@ def _cons(item: _ScoredPlan) -> list[str]:
     而且前端列表以句子为 key，重复句子会让 React 报 duplicate key
     （E2E-14 就是这么红起来的）。去重后还能多留一条不同的信息。
     """
-    return list(dict.fromkeys(warning.message for warning in item.report.warnings))[:3]
+    ordered: list[str] = []
+    for code_first in (True, False):
+        for warning in item.report.warnings:
+            is_priority = warning.code in _PRIORITY_NOTES
+            if is_priority != code_first or warning.message in ordered:
+                continue
+            ordered.append(warning.message)
+    return ordered[:3]
 
 
 def _reason(item: _ScoredPlan) -> str:

@@ -465,18 +465,27 @@ def merge_intent_patch(
     if not applied:
         return parsed, ()
 
+    # ★ 这里是逐字段重建的 ★ 漏掉任何一个字段，那个字段就会被模型的任何一次补全
+    # 静默重置成默认值 —— ``day_span`` 就这样丢过一次（用户选了"半天"，补充要求里
+    # 触发任一条模型补全，那一天就悄悄变回一整天）。新增字段必须在这里出现一次。
     merged_intent = Intent(
         city=intent.city,
         days=days,
+        day_span=intent.day_span,
         people=people,
         preferences=prefs,
         pace=pace,
+        # 按天设置**不由模型决定**：它只改全局偏好与排除项，逐天的节奏/主题原样保留。
+        day_plans=intent.day_plans,
         budget=budget,
         start_min=intent.start_min,
         end_min=intent.end_min,
         travel_date=intent.travel_date,
         weather_sensitive=intent.weather_sensitive,
     )
+    if pace != intent.pace:
+        # 与规则引擎同一口径："轻松点"是整趟的说法，逐天选过的节奏一起改。
+        merged_intent = merged_intent.with_pace_for_all_days(pace)
     merged = ParseResult(
         intent=merged_intent,
         constraints=(*parsed.constraints, *extra),

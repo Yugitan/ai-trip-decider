@@ -73,12 +73,16 @@ def params_hash(
     travel_date: str | None = None,
     exclusions: Sequence[str] = (),
     constraints: Sequence[str] = (),
+    day_plans: Sequence[str] = (),
 ) -> str:
     """规划参数指纹（PRD §15.3）。
 
     列表一律**排序后**入键：``[food, photo]`` 与 ``[photo, food]`` 必须命中同一条缓存，
     否则用户改一下偏好勾选顺序就会多花一次冷启动的钱。
     金额用 ``str`` 规范化，避免 ``300`` 与 ``300.00`` 生成两个键。
+
+    ``day_plans`` 例外，它**不排序**：那是"第几天"的顺序，``[轻松, 紧凑]`` 与
+    ``[紧凑, 轻松]`` 是两趟完全不同的行程，排序会把它们并成同一条缓存。
     """
     canonical = [
         city.strip().lower(),
@@ -86,6 +90,7 @@ def params_hash(
         str(int(people)),
         "|".join(sorted(p.strip().lower() for p in preferences)),
         pace,
+        "|".join(plan.strip().lower() for plan in day_plans),
         budget_scope,
         "" if budget_amount is None else str(Decimal(str(budget_amount)).normalize()),
         start_time,

@@ -99,6 +99,37 @@ def test_rebuild_from_snapshot_does_not_replay_original_free_text() -> None:
     assert payload.travel_date == "2026-10-01"
 
 
+def test_rebuild_from_snapshot_keeps_day_span_and_day_plans() -> None:
+    """★ 快照里的字段一个都不能漏接 ★ 漏一个，修改/复制一次就把用户的设置洗掉。
+
+    ``day_span`` 与 ``day_plans`` 都曾经在这条路径上被静默丢掉："半天"的行程
+    修改一次变回一整天，第 2 天的主题变回"没主题" —— 而新版看起来完全正常。
+    """
+    snapshot = _snapshot(
+        day_span="half_day",
+        day_plans=[
+            {"day": 1, "pace": "relaxed", "theme": "food"},
+            {"day": 2, "pace": "packed", "theme": "culture"},
+        ],
+    )
+    payload = plan_request_from_trip({}, snapshot)
+
+    assert payload.day_span == "half_day"
+    assert [(plan.pace, plan.theme) for plan in payload.day_plans] == [
+        ("relaxed", "food"),
+        ("packed", "culture"),
+    ]
+
+
+def test_rebuild_from_legacy_snapshot_without_day_plans() -> None:
+    """旧快照（按天设置之前生成的）没有 ``day_plans``：不能因此报错，
+    也不能凭空编出几天的设置 —— 空列表表示"按兜底节奏排"。"""
+    payload = plan_request_from_trip({}, _snapshot(day_span="half_day"))
+
+    assert payload.day_plans == []
+    assert payload.day_span == "half_day"
+
+
 def test_raw_input_wins_over_snapshot() -> None:
     raw = {
         "city": "guangzhou",

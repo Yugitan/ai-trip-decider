@@ -10,24 +10,37 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 
 import pytest
 
-from app.core.config import get_limits_config
+from app.core.config import get_limits_config, get_scoring_config
 from app.domain.budget import estimate_route_budget
 from app.domain.feasibility import FeasibilityReport, Violation
 from app.domain.models import (
+    ArchetypeName,
     BudgetSpec,
+    DayPlan,
     Intent,
     Leg,
     Place,
     RouteMetrics,
+    RoutePlan,
     Stop,
     route_metrics,
 )
 from app.domain.planner import day_budget_minutes, day_window
-from app.services.plan_service import _merge_reports, _merge_score_breakdown
+from app.services.plan_service import (
+    _active_theme,
+    _cons,
+    _intent_for_day,
+    _intent_with_day_themes,
+    _merge_reports,
+    _merge_score_breakdown,
+    _ScoredPlan,
+    _theme_notes,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -221,3 +234,191 @@ def test_stop_day_defaults_to_one_and_is_copyable() -> None:
     assert stop.day == 1
     assert stop.on_day(3).day == 3
     assert stop.on_day(3).arrive_min == stop.arrive_min
+
+
+# ── 按天设置：节奏与主题（PRD FR-00）───────────────────────────────────────
+
+
+def _day_plan_intent(**overrides: object) -> Intent:
+    return _intent(
+        **{
+            "days": 2,
+            "day_plans": (
+                DayPlan(pace="relaxed", theme="food"),
+                DayPlan(pace="packed", theme="culture"),
+            ),
+            **overrides,
+        }
+    )
+
+
+def test_plan_for_day_returns_that_days_setting() -> None:
+    intent = _day_plan_intent()
+    assert intent.plan_for_day(1) == DayPlan(pace="relaxed", theme="food")
+    assert intent.plan_for_day(2) == DayPlan(pace="packed", theme="culture")
+
+
+def test_plan_for_days_without_a_setting_falls_back_to_pace() -> None:
+    """只给了两天的设置，却排了三天时，第三天用兜底节奏（而不是报错/搛着第二个）。"""
+    intent = _day_plan_intent(pace="balanced", days=3)
+    assert intent.plan_for_day(3) == DayPlan(pace="balanced")
+    assert intent.plan_for_day(0) == DayPlan(pace="balanced"), "第 0 天不存在，不应撞下标"
+
+
+def test_pace_for_all_days_rewrites_every_day_but_keeps_themes() -> None:
+    """自由文本里的"轻松点"是**整趟**的说法：它改写每一天，但不动主题。"""
+    intent = _day_plan_intent().with_pace_for_all_days("packed")
+    assert intent.pace == "packed"
+    assert [plan.pace for plan in intent.day_plans] == ["packed", "packed"]
+    assert [plan.theme for plan in intent.day_plans] == ["food", "culture"]
+
+
+def test_active_theme_is_none_when_the_dimension_was_negated() -> None:
+    """补充要求里说了"不要文化"（权重 0）时，第 2 天的文化主题**不生效**。
+
+    两个选择互相矛盾时不能替用户拍板：照更明确的那句做，再在报告里说出来。
+    """
+    assert _active_theme(_day_plan_intent(), 2) == "culture"
+    assert _active_theme(_day_plan_intent(preferences={"culture": 0.0}), 2) is None
+    # 没设主题的那一天与它无关
+    assert _active_theme(_day_plan_intent(preferences={"culture": 0.0}), 1) == "food"
+
+
+def test_intent_for_day_swaps_the_pace_and_adds_the_theme_weight() -> None:
+    """这是"按天设置"与规划管线之间唯一的接缝：节奏换掉、主题升到 1.0。"""
+    intent = _day_plan_intent(preferences={"food": 1.0})
+
+    day2 = _intent_for_day(intent, 2)
+    assert day2.pace == "packed"
+    assert day2.preferences["culture"] == 1.0, "主题必须成为那一天的偏好权重，否则打分与理由都不认它"
+    assert day2.preferences["food"] == 1.0, "其它偏好不能被主题挤掉"
+    assert day2.day_plans == intent.day_plans, "意图的其余字段不得被改写"
+
+
+def test_intent_for_day_does_not_revive_a_negated_dimension() -> None:
+    intent = _day_plan_intent(preferences={"culture": 0.0})
+    assert _intent_for_day(intent, 2).preferences["culture"] == 0.0
+
+
+def test_intent_with_day_themes_only_adds_missing_dimensions() -> None:
+    """主题维度要进候选池的权重（否则那天的地点可能**根本没进候选池**），
+    但不得动已有权重："""
+    untouched = _day_plan_intent(preferences={"food": 2.5})
+    assert _intent_with_day_themes(untouched).preferences["food"] == 2.5
+
+    enriched = _intent_with_day_themes(_day_plan_intent())
+    assert enriched.preferences["food"] == 1.0
+    assert enriched.preferences["culture"] == 1.0
+
+
+def test_intent_with_day_themes_is_a_no_op_without_themes() -> None:
+    plain = _intent(days=2, preferences={"food": 1.0})
+    assert _intent_with_day_themes(plain) is plain
+
+
+def _plan_entry(stops: tuple[Stop, ...], archetype: ArchetypeName = "relaxed") -> _ScoredPlan:
+    return _ScoredPlan(
+        plan=RoutePlan(archetype=archetype, stops=stops),
+        archetype=archetype,
+        report=FeasibilityReport(
+            feasible=True, violations=(), warnings=(), metrics=route_metrics(stops)
+        ),
+        breakdown=_breakdown(0.5),  # type: ignore[arg-type]
+        source="generated",
+    )
+
+
+def _place(name: str, **scores: float) -> Place:
+    return Place(
+        id=f"{name}-id",
+        name=name,
+        category="attraction",
+        lat=23.1,
+        lng=113.2,
+        scores=dict(scores),
+    )
+
+
+def test_theme_notes_report_the_shortfall_with_real_numbers() -> None:
+    """★ 主题凑不满时必须说出来 ★ 而且是"真的排出来几站"，不是我们当初的估计。"""
+    stops = (
+        Stop(place=_place("博物馆", culture=0.9), arrive_min=9 * 60, stay_min=60),
+        Stop(place=_place("商场", shopping=0.9), arrive_min=10 * 60, stay_min=60),
+        Stop(place=_place("茶楼", food=0.9), arrive_min=11 * 60, stay_min=60),
+    )
+    notes = _theme_notes(
+        _intent(days=1, day_plans=(DayPlan(theme="culture"),)),
+        [_plan_entry(stops)],
+        limits=LIMITS,
+        scoring=get_scoring_config(),
+    )
+
+    assert [note.code for note in notes] == ["THEME_SHORTFALL"]
+    assert notes[0].at_seq is None, "主题是**整条路线**的事，不该挂到某一站上"
+    assert "1/3" in notes[0].message and "文化" in notes[0].message
+    assert notes[0].detail["matched"] == 1 and notes[0].detail["total"] == 3
+
+
+def test_theme_notes_are_silent_when_the_theme_was_met() -> None:
+    """凑够了就不该有任何一句唠叨 —— 否则"需要留意"会变成噪音。"""
+    stops = (
+        Stop(place=_place("博物馆", culture=0.9), arrive_min=9 * 60, stay_min=60),
+        Stop(place=_place("书院", culture=0.8), arrive_min=10 * 60, stay_min=60),
+    )
+    assert (
+        _theme_notes(
+            _intent(days=1, day_plans=(DayPlan(theme="culture"),)),
+            [_plan_entry(stops)],
+            limits=LIMITS,
+            scoring=get_scoring_config(),
+        )
+        == ()
+    )
+
+
+def test_theme_notes_explain_the_conflict_instead_of_the_shortfall() -> None:
+    """与"不要文化"冲突的那一天：说的应该是"没按主题排"（而不是"只凑到 0 站"）。"""
+    stops = (Stop(place=_place("商场", shopping=0.9), arrive_min=9 * 60, stay_min=60),)
+    notes = _theme_notes(
+        _intent(days=1, preferences={"culture": 0.0}, day_plans=(DayPlan(theme="culture"),)),
+        [_plan_entry(stops)],
+        limits=LIMITS,
+        scoring=get_scoring_config(),
+    )
+
+    assert [note.code for note in notes] == ["THEME_IGNORED"]
+    assert "不要文化" in notes[0].message
+
+
+def test_theme_notes_ignore_days_without_a_theme() -> None:
+    stops = (Stop(place=_place("商场", shopping=0.9), arrive_min=9 * 60, stay_min=60),)
+    assert (
+        _theme_notes(
+            _intent(days=1, day_plans=(DayPlan(pace="packed"),)),
+            [_plan_entry(stops)],
+            limits=LIMITS,
+            scoring=get_scoring_config(),
+        )
+        == ()
+    )
+
+
+def test_cons_puts_theme_notes_before_generic_warnings() -> None:
+    """用户选了主题就欠他一句交代：那句话不能被前面三条通用告警挤掉。"""
+    stops = (Stop(place=_place("商场", shopping=0.9), arrive_min=9 * 60, stay_min=60),)
+    entry = _plan_entry(stops)
+    report = FeasibilityReport(
+        feasible=True,
+        violations=(),
+        warnings=(
+            Violation(code="HOURS_UNKNOWN", severity="soft", message="A 营业时间未知", at_seq=1),
+            Violation(code="PRICE_UNKNOWN", severity="soft", message="有项目没有价格"),
+            Violation(code="ESTIMATED_TRANSIT", severity="soft", message="耗时为估算值"),
+            Violation(code="THEME_SHORTFALL", severity="soft", message="第 2 天没凑够主题"),
+        ),
+        metrics=route_metrics(stops),
+    )
+    notes = _cons(replace(entry, report=report))
+
+    assert notes[0] == "第 2 天没凑够主题"
+    assert len(notes) == 3

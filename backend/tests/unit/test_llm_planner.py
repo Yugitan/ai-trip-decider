@@ -20,7 +20,7 @@ import pytest
 
 from app.core.config import get_limits_config, get_pricing_config, get_ttl_config
 from app.core.errors import ErrorCode, ProviderError
-from app.domain.models import BudgetSpec, Constraint, Intent, ParseResult
+from app.domain.models import BudgetSpec, Constraint, DayPlan, Intent, ParseResult
 from app.providers.base import ProviderHealth
 from app.providers.llm.base import LlmMessage, LlmResponse, LlmTier, LlmUsage
 from app.providers.llm.null import NullLlmProvider
@@ -271,6 +271,65 @@ def test_merge_intent_patch_applies_whitelisted_fields() -> None:
     assert merged.constraints[0].type == "exclude_place"
     # 已交给模型处理的片段不再重复抛给下游
     assert merged.unparsed == ()
+
+
+def test_merge_intent_patch_preserves_fields_the_model_does_not_own() -> None:
+    """★ 逐字段重建的地方，漏一个字段就等于「模型一补全就把它重置」★
+
+    ``day_span`` 与 ``day_plans`` 不属于模型的职权（它只改偏好/天数/预算/排除），
+    但它们必须原样活过这次合并 —— 它们都曾经被这个函数静默丢掉：
+    用户选了「半天」、逐天选了主题，一句补充要求触发模型补全，就变回默认值，
+    而修改后的那一版看起来完全正常。
+    """
+    parsed = ParseResult(
+        intent=Intent(
+            day_span="half_day",
+            day_plans=(DayPlan(pace="packed", theme="food"), DayPlan(pace="relaxed")),
+        ),
+        constraints=(),
+        applied_rules=("day_span:half_day",),
+        unparsed=("想看夜景",),
+        parse_source="rule",
+    )
+    merged, applied = merge_intent_patch(
+        parsed,
+        LlmIntentPatch(preferences=["night_view"]),
+        allowed_preferences=_PREFS,
+    )
+
+    assert applied == ("preferences",)
+    assert merged.intent.day_span == "half_day"
+    assert merged.intent.day_plans == (
+        DayPlan(pace="packed", theme="food"),
+        DayPlan(pace="relaxed"),
+    )
+
+
+def test_merge_intent_patch_pace_applies_to_every_day() -> None:
+    """模型说"轻松点"与规则引擎说"轻松点"必须得到同一个结果：**整趟**每一无。
+
+    否则同一句话会因"哪条路解析到"而产生两套互不相同的行程。"""
+    parsed = ParseResult(
+        intent=Intent(
+            pace="relaxed",
+            day_plans=(DayPlan(pace="relaxed", theme="food"), DayPlan(pace="relaxed", theme="culture")),
+        ),
+        constraints=(),
+        applied_rules=(),
+        unparsed=("紧凑一点",),
+        parse_source="rule",
+    )
+    merged, applied = merge_intent_patch(
+        parsed,
+        LlmIntentPatch(pace="packed"),
+        allowed_preferences=_PREFS,
+    )
+
+    assert applied == ("pace",)
+    assert merged.intent.pace == "packed"
+    assert [plan.pace for plan in merged.intent.day_plans] == ["packed", "packed"]
+    # 主题不是节奏：它不能被顺手改掉
+    assert [plan.theme for plan in merged.intent.day_plans] == ["food", "culture"]
 
 
 def test_merge_intent_patch_keeps_rule_result_when_nothing_applies() -> None:

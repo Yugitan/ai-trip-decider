@@ -545,10 +545,20 @@ def plan_request_from_trip(raw: dict[str, Any], intent_snapshot: dict[str, Any])
 
     budget = intent_snapshot.get("budget") or {}
     preferences = intent_snapshot.get("preferences") or {}
+    # ★ 快照里的字段一个都不能漏接 ★ 这里以前只接了 pace，所以"半天"的行程被修改/复制
+    # 一次就静默变回一整天（而修改后的那版看起来完全正常）。按天设置同理：漏掉它，
+    # 修改一次就把"第 2 天＝文化日"洗掉。
+    day_plans = [
+        {"pace": item.get("pace", "relaxed"), "theme": item.get("theme")}
+        for item in (intent_snapshot.get("day_plans") or [])
+        if isinstance(item, dict)
+    ]
     return PlanRequest(
         city=str(intent_snapshot.get("city") or "guangzhou"),
         days=int(intent_snapshot.get("days") or 1),
+        day_span=str(intent_snapshot.get("day_span") or "full_day"),
         people=int(intent_snapshot.get("people") or 2),
+        day_plans=day_plans,
         # 只带上**正权重**的偏好：权重 0 表示用户明确说"不要这一类"，
         # 把它写进 preferences 会被 ``build_intent`` 重新赋成 1.0，
         # 于是副本/修改反而开始"优先推荐"用户不想要的东西。

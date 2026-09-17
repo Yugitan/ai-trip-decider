@@ -84,6 +84,25 @@ def test_params_hash_travel_date_changes_key() -> None:
     assert _params(travel_date=None) != _params(travel_date="2026-10-01")
 
 
+def test_params_hash_separates_day_plans() -> None:
+    """按天设置必须进键：漏了它，改了第 2 天的主题会**拿回上一版的行程**。"""
+    relaxed = _params(day_plans=("1:relaxed:food", "2:relaxed:culture"))
+    assert relaxed != _params(day_plans=("1:packed:food", "2:relaxed:culture"))
+    assert relaxed != _params(day_plans=("1:relaxed:culture", "2:relaxed:food"))
+
+
+def test_params_hash_keeps_the_day_order() -> None:
+    """★ 按天设置**不排序** ★ ``[轻松, 紧凑]`` 与 ``[紧凑, 轻松]`` 是两趟完全不同的行程；
+    把这两个并成一条缓存，用户改完看到的还是原来那版。
+    （与偏好列表相反：那个排序后入键是**故意的**。）"""
+    first = _params(day_plans=("1:relaxed:food", "2:packed:culture"))
+    swapped = _params(day_plans=("1:packed:culture", "2:relaxed:food"))
+    assert first != swapped
+
+    # 没有按天设置（旧调用方）与"有设置但都是默认值"也必须是不同的键
+    assert _params() != _params(day_plans=("1:relaxed:-",))
+
+
 def test_llm_cache_key_changes_with_prompt_version() -> None:
     """改 prompt 必须让旧缓存失效，否则会读到"用旧规则生成的新数据"。"""
     base: dict[str, Any] = {
