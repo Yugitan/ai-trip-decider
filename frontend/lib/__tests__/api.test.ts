@@ -24,6 +24,7 @@ import {
   getSharedTrip,
   getTrip,
   listCities,
+  getCostSummary,
   listPlaces,
   reportClientError,
   searchPlaces,
@@ -718,6 +719,27 @@ describe("reportClientError", () => {
       jsonResponse(errorEnvelope({ code: "RATE_LIMITED", message: "太频繁" }), { status: 429 }),
     );
     await expect(reportClientError({ component: "x", message: "boom" })).resolves.toBe(false);
+  });
+});
+
+describe("getCostSummary", () => {
+  it("带上统计窗口；有 Token 时走 X-Admin-Token，没有时一个头都不加", async () => {
+    // 每次调用都要一个新的 Response：response body 只能被读一次，
+    // 复用同一个对象会让第二次调用报"无法解析的内容"（这是测试自己的坑）。
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(jsonResponse(okEnvelope({ window_days: 7 }))),
+    );
+
+    await getCostSummary(30, "s3cret");
+    const withToken = fetchMock.mock.calls[0]?.[1];
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("days=30");
+    expect(withToken?.headers).toMatchObject({ "X-Admin-Token": "s3cret" });
+
+    await getCostSummary(7, null);
+    const withoutToken = fetchMock.mock.calls[1]?.[1];
+    expect((withoutToken?.headers ?? {}) as Record<string, string>).not.toHaveProperty(
+      "X-Admin-Token",
+    );
   });
 });
 

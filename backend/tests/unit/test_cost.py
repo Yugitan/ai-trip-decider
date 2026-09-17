@@ -22,9 +22,24 @@ from app.services.cost import (
     _decimal,
     _node,
     compare_daily_budget,
+    percentile,
 )
 
 pytestmark = pytest.mark.unit
+
+
+def test_percentile_is_nearest_rank_and_never_interpolates() -> None:
+    """分位数取的必须是**真实存在过的一笔**，不是插值出来的假数字。
+
+    口径与 ``scripts/benchmark.py`` 一致（最近秩）：n=10 的 p95 就是最大值。
+    这条曾经被写错过一次（TASKS 问题 79），所以两个样本量都钉住。
+    """
+    values = [0.04, 0.01, 0.03, 0.02]
+    assert percentile(values, 50) == 0.02  # ceil(0.5×4)=2 → 第 2 小
+    assert percentile(values, 95) == 0.04  # ceil(3.8)=4 → 最大
+    assert percentile(list(range(10)), 95) == 9
+    assert percentile(list(range(20)), 95) == 18  # n=20 时才是"第二大"
+    assert percentile([], 95) is None
 
 
 def _synthetic_pricing() -> PricingConfig:

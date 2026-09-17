@@ -683,6 +683,7 @@ export function listPlaces(
   query.set("offset", String(params.offset ?? 0));
   return request<PlacePage>(`/api/v1/cities/${encodeURIComponent(city)}/places?${query}`);
 }
+
 /**
  * 地点搜索（`GET /api/v1/places/search`，PRD §7.2）。
  *
@@ -773,6 +774,58 @@ export async function reportClientError(input: ClientErrorInput): Promise<boolea
   }
 }
 
+// ── 成本后台（PRD FR-12 AC-12.2）───────────────────────────────────────────
+
+export interface CostSummary {
+  window_days: number;
+  by_category: { category: string; calls: number; amount_cny: string; cache_hits: number }[];
+  by_provider: {
+    provider: string;
+    category: string;
+    calls: number;
+    amount_cny: string;
+    cache_hits: number;
+  }[];
+  plans: {
+    plans: number;
+    avg_cny: number | null;
+    p50_cny: number | null;
+    p95_cny: number | null;
+    max_cny: number | null;
+    uncalibrated_plans: number;
+    rows_without_request: number;
+    target_cny: number;
+    /** 未校准的窗口里是 `null`（"不知道"），不是 `false` */
+    within_target: boolean | null;
+    top: { request_id: string; amount_cny: string; calls: number; uncalibrated: boolean }[];
+  };
+  cache: { calls: number; hits: number; hit_rate: number | null };
+  pricing_calibrated: boolean;
+  uncalibrated_rows: number;
+  note: string;
+  daily: { spent_cny: string; limit_cny: number; exceeded: boolean };
+  breakers: {
+    plan_total_cny: number;
+    plan_search_cny: number;
+    plan_map_calls: number;
+    plan_llm_calls: number;
+  };
+}
+
+/**
+ * 读成本汇总。`token` 为空时不带 `X-Admin-Token`（此时后端只接受本机来源）。
+ *
+ * 这个函数在**浏览器**里跑，所以 Token 存 localStorage 而不是 cookie：
+ * 它不是会话凭证，只是一个让人看到账单的临时口令。
+ */
+export function getCostSummary(
+  days: number,
+  token: string | null,
+): Promise<ApiResult<CostSummary>> {
+  return request<CostSummary>(`/api/v1/admin/cost/summary?days=${encodeURIComponent(String(days))}`, {
+    headers: token ? { "X-Admin-Token": token } : undefined,
+  });
+}
 
 export function listRoutes(
   city: string,

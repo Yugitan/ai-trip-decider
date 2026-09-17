@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -37,11 +38,30 @@ __all__ = [
     "Price",
     "PriceBook",
     "compare_daily_budget",
+    "percentile",
 ]
 
 log = get_logger("cost")
 
 BreakerKind = Literal["plan", "search", "map", "llm"]
+
+
+def percentile(values: Sequence[float], p: float) -> float | None:
+    """最近秩（nearest-rank）分位数；空序列返回 ``None``。
+
+    刻意不用插值：这里的样本是"一次次规划花了多少钱"，
+    插出来的值（如 0.0347 元）会让人以为真的有一笔这样的支出。
+    返回的永远是**真实存在过的那一笔**。
+
+    ``p`` 取 (0, 100]；``n=10`` 时 p95 就是最大值（``ceil(0.95×10)=10``）——
+    与 ``scripts/benchmark.py`` 报的口径一致（这一点曾被写错一次，见 TASKS 问题 79）。
+    """
+    if not values:
+        return None
+    ordered = sorted(values)
+    rank = math.ceil(p / 100 * len(ordered))
+    index = min(max(rank, 1), len(ordered)) - 1
+    return ordered[index]
 
 
 def compare_daily_budget(spent_cny: Decimal, limit_cny: float) -> bool:
@@ -431,6 +451,62 @@ class CostStore:
                 if int(uncalibrated) > 0
                 else "全部单价已校准"
             ),
+        }
+
+    async def plan_cost_stats(self, *, days: int = 7, top_n: int = 5) -> dict[str, Any]:
+        """按 ``request_id`` 聚合的"单次规划成本"：平均 / P50 / P95 / 最贵的几笔。
+
+        ★ 为什么不能直接拿 ``cost_logs`` 的行平均 ★
+        这张表是**一次外部调用一行**：本地知识库就能出方案的一次规划可能是 0 行，
+        调了一次模型又一次地图的是 3 行。行平均值因此既不是"单次规划成本"，
+        也会随"我们加了多少种外部调用"漂移 —— 而 PRD §3.2 那条 ≤ ¥0.5 的红线
+        说的是一次规划。所以这里先按 request_id 汇总成"一笔"，再算分位。
+
+        ``request_id`` 为空的记录（脚本跑出来的、或早期数据）单独计数：
+        把它们当成"零成本的一次规划"会拉低平均值，只能排除并如实报告。
+        """
+        since = datetime.now(UTC) - timedelta(days=days)
+        rows = (
+            await self.session.execute(
+                select(
+                    CostLog.request_id,
+                    func.coalesce(func.sum(CostLog.amount_cny), 0).label("amount"),
+                    func.count().label("calls"),
+                    # 这一笔里只要有一行单价没校准，整笔金额就不能当真实支出看
+                    func.bool_or(CostLog.pricing_calibrated.is_(False)).label("any_uncalibrated"),
+                )
+                .where(CostLog.created_at >= since, CostLog.request_id.is_not(None))
+                .group_by(CostLog.request_id)
+            )
+        ).all()
+        totals = [float(row.amount) for row in rows]
+        without_request = int(
+            (
+                await self.session.execute(
+                    select(func.count())
+                    .select_from(CostLog)
+                    .where(CostLog.created_at >= since, CostLog.request_id.is_(None))
+                )
+            ).scalar_one()
+        )
+        top = sorted(rows, key=lambda row: float(row.amount), reverse=True)[:top_n]
+        return {
+            "plans": len(totals),
+            "avg_cny": None if not totals else round(sum(totals) / len(totals), 4),
+            "p50_cny": percentile(totals, 50),
+            "p95_cny": percentile(totals, 95),
+            "max_cny": None if not totals else max(totals),
+            "uncalibrated_plans": sum(1 for row in rows if row.any_uncalibrated),
+            "rows_without_request": without_request,
+            "top": [
+                {
+                    "request_id": str(row.request_id),
+                    "amount_cny": str(row.amount),
+                    "calls": int(row.calls),
+                    "uncalibrated": bool(row.any_uncalibrated),
+                }
+                for row in top
+            ],
         }
 
     async def by_provider(self, *, days: int = 7) -> list[dict[str, Any]]:
