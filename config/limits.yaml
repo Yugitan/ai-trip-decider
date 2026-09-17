@@ -109,6 +109,8 @@ rate_limit:
   cold_plans_per_session_per_day: 8
   revisions_per_session_per_hour: 30
   feedback_per_ip_per_hour: 10
+  feedback_message_max_chars: 1000   # 用户主动提交的纠错说明（与自由文本同一套"上限在配置里"口径）
+  error_report_max_chars: 2000       # 浏览器上报的错误信息（PRD §25 error_logs）
   body_max_bytes: 16384
   input_free_text_max_chars: 500
   idempotency_window_s: 10      # 同 session 同参数在此窗口内重复提交返回同一 trip

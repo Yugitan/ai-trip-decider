@@ -25,11 +25,13 @@ import {
   getTrip,
   listCities,
   listPlaces,
+  reportClientError,
   searchPlaces,
   listRoutes,
   planTrip,
   reviseTrip,
   shareTrip,
+  submitFeedback,
   undoTrip,
 } from "@/lib/api";
 
@@ -682,6 +684,43 @@ describe("searchPlaces", () => {
     expect(String(fetchMock.mock.calls[1]?.[0])).not.toContain("city=");
   });
 });
+describe("submitFeedback", () => {
+  it("POST /feedback，且只带走显式给出的字段", async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(okEnvelope({ id: "f1", status: "open", note: "已记录" })),
+    );
+
+    const result = await submitFeedback({ category: "wrong_hours", place_id: "p1" });
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(String(url)).toContain("/api/v1/feedback");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({ category: "wrong_hours", place_id: "p1" });
+    expect(result.data.note).toBe("已记录");
+  });
+});
+
+describe("reportClientError", () => {
+  it("成功时返回 true，并把 envelope 拆开", async () => {
+    fetchMock.mockResolvedValue(jsonResponse(okEnvelope({ id: 7, recorded: true })));
+    await expect(reportClientError({ component: "x", message: "boom" })).resolves.toBe(true);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("/api/v1/errors");
+  });
+
+  it("★ 失败时返回 false 而不是抛异常 ★", async () => {
+    // 调用方是 error boundary：在那里再抛一个异常，用户会看到空白页，
+    // 而我们连"发生过什么"都收不到。
+    fetchMock.mockRejectedValue(new Error("断网"));
+    await expect(reportClientError({ component: "x", message: "boom" })).resolves.toBe(false);
+
+    // 后端明确拒绝（如限流）也走同一条路
+    fetchMock.mockResolvedValue(
+      jsonResponse(errorEnvelope({ code: "RATE_LIMITED", message: "太频繁" }), { status: 429 }),
+    );
+    await expect(reportClientError({ component: "x", message: "boom" })).resolves.toBe(false);
+  });
+});
+
 
 // ── ApiError 本身 ──────────────────────────────────────────────────────────
 

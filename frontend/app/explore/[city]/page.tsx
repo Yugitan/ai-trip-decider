@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { PlaceFeedback } from "@/components/place-feedback";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import {
@@ -295,6 +296,12 @@ function PlaceCard({ place }: { place: PlacePage["items"][number] }) {
             来源：{source.name}（链接不可用）
           </span>
         ) : null}
+      </div>
+
+      {/* 报告错误入口（AC-11.5）：卡片上就能说“这条数据不对”，
+          不需要用户先记住自己要报的是哪个地点。 */}
+      <div className="mt-2">
+        <PlaceFeedback placeId={place.id} placeName={place.name} />
       </div>
     </li>
   );

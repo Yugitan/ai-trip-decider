@@ -592,6 +592,8 @@ class RateLimits(BaseModel):
     cold_plans_per_session_per_day: int
     revisions_per_session_per_hour: int
     feedback_per_ip_per_hour: int
+    feedback_message_max_chars: int
+    error_report_max_chars: int
     body_max_bytes: int
     input_free_text_max_chars: int
     idempotency_window_s: int

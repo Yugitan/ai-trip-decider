@@ -707,6 +707,72 @@ export interface PlaceSearchResult {
   items: PlaceSummary[];
 }
 
+// ── 纠错反馈与错误上报（PRD FR-11.5 · FR-13.5）────────────────────────────
+//
+// 两个都是"用户/浏览器 → 我们"的单向写入端点，因此在客户端这一层也共用一套约束：
+// **它们不该成为用户的障碍** —— 反馈失败时可以重试，而错误上报失败必须被吞掉
+// （为了上报一条错误而再抛一个错误，只会让页面更糟）。
+
+/** 与后端 `feedback` 表的 CHECK 约束同一份取值（见 `app/schemas/reports.py`）。 */
+export type FeedbackCategory =
+  | "wrong_hours"
+  | "wrong_price"
+  | "closed"
+  | "bad_route"
+  | "wrong_coord"
+  | "other";
+
+export interface FeedbackInput {
+  category: FeedbackCategory;
+  message?: string | null;
+  contact?: string | null;
+  place_id?: string | null;
+  trip_id?: string | null;
+}
+
+export interface FeedbackResult {
+  id: string;
+  status: string;
+  /** 后端写好的回执（"已记录，数据问题会在人工复核时核对来源后修正"） */
+  note: string;
+}
+
+export function submitFeedback(input: FeedbackInput): Promise<ApiResult<FeedbackResult>> {
+  return request<FeedbackResult>("/api/v1/feedback", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export interface ClientErrorInput {
+  component: string;
+  message: string;
+  level?: "debug" | "info" | "warning" | "error" | "critical";
+  code?: string | null;
+  request_id?: string | null;
+  context?: Record<string, unknown> | null;
+}
+
+/**
+ * 上报一条浏览器错误（POST /errors）。
+ *
+ * ★ 它**永远不抛** ★ 这是与其它 API 函数唯一的区别，也是刻意的：
+ * 调用方是 `error.tsx`（页面已经崩过一次了）。在这里再抛一个异常，
+ * 用户会看到一个空白的错误页，而我们连"发生过什么"都不知道。
+ * 失败就失败，返回 `false` 让调用方决定要不要在控制台补一句。
+ */
+export async function reportClientError(input: ClientErrorInput): Promise<boolean> {
+  try {
+    await request<{ id: number; recorded: boolean }>("/api/v1/errors", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 
 export function listRoutes(
   city: string,
