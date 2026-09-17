@@ -2,7 +2,8 @@
 
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 
-import { planTrip, type DaySpan, type PlanRequest } from "@/lib/api";
+import { planTrip, type DayPlanInput, type DaySpan, type Pace, type PlanRequest } from "@/lib/api";
+import { PREFERENCE_OPTIONS, toApiPreferences } from "@/lib/preferences";
 import {
   subscribeToPlan,
   type PlanCompletedEvent,
@@ -23,7 +24,6 @@ const DEFAULT_DAYS = 1;
 const DEFAULT_PEOPLE = 2;
 const DEFAULT_BUDGET = 300;
 
-type Pace = PlanRequest["pace"];
 type BudgetScope = NonNullable<PlanRequest["budget"]>["scope"];
 
 /**
@@ -69,33 +69,24 @@ const SCOPE_OPTIONS: readonly SegmentedOption<BudgetScope>[] = [
   { value: "total", label: "总计" },
 ];
 
-/**
- * 偏好选项：`key` 是界面标签（也是组件状态里存的值），`api` 是接口枚举值。
- * `api` 必须与后端 `config/scoring.yaml` 的 `preference_dimensions` 键**完全一致**
- * （不是超集、也不是子集）：少一个 → 用户选了就 422；多一个 → 后端不认。
- */
-export const PREFERENCE_OPTIONS: ReadonlyArray<{
-  key: string;
-  api: string;
-  emoji: string;
-}> = [
-  { key: "美食", api: "food", emoji: "🍜" },
-  { key: "拍照", api: "photo", emoji: "📷" },
-  { key: "文化", api: "culture", emoji: "🏛️" },
-  { key: "夜景", api: "night_view", emoji: "🌃" },
-  { key: "亲子", api: "family", emoji: "🧒" },
-  { key: "情侣", api: "couple", emoji: "💞" },
-  { key: "CityWalk", api: "citywalk", emoji: "🚶" },
-  { key: "自然", api: "nature", emoji: "🌿" },
-  { key: "购物", api: "shopping", emoji: "🛍️" },
-  { key: "博物馆", api: "museum", emoji: "🖼️" },
-];
+//: 默认节奏：与 `config/limits.yaml` 的 `walking_caps_m` 默认档一致。
+const DEFAULT_PACE: Pace = "relaxed";
 
-/** 界面标签 → 接口取值；按选项顺序输出，保证同一组选择的 payload 可稳定比对。 */
-export function toApiPreferences(labels: readonly string[]): string[] {
-  return PREFERENCE_OPTIONS.filter((option) => labels.includes(option.key)).map(
-    (option) => option.api,
-  );
+/** 新的一天：还没单独设置过，用默认节奏、不设主题。 */
+function makeDayPlan(pace: Pace = DEFAULT_PACE): DayPlanInput {
+  return { pace, theme: null };
+}
+
+/**
+ * 把按天设置的长度对齐到天数：多了截掉、少了补默认值。
+ *
+ * 长度必须**恰好等于** ``days``：后端会把"多设的天"当成入参错误（因为那几天
+ * 永远不会被排到），而少了的天则要用兜底节奏 —— 对齐之后两种歧义都没有了。
+ */
+function resizeDayPlans(plans: readonly DayPlanInput[], days: number): DayPlanInput[] {
+  const kept = plans.slice(0, days);
+  while (kept.length < days) kept.push(makeDayPlan());
+  return kept;
 }
 
 /** 一条示例必须能「点一下就直接提交」，所以只做结构化字段的映射。 */
@@ -363,7 +354,10 @@ export function PlannerForm() {
   const [daySpan, setDaySpan] = useState<DaySpan>("full_day");
   const [peopleText, setPeopleText] = useState(String(DEFAULT_PEOPLE));
   const [preferences, setPreferences] = useState<string[]>([]);
-  const [pace, setPace] = useState<Pace>("relaxed");
+  //: 按天设置（长度恒等于 ``days``，见 ``resizeDayPlans``）。
+  const [dayPlans, setDayPlans] = useState<DayPlanInput[]>(() =>
+    resizeDayPlans([], DEFAULT_DAYS),
+  );
   const [budgetText, setBudgetText] = useState(String(DEFAULT_BUDGET));
   const [budgetScope, setBudgetScope] = useState<BudgetScope>("per_person");
   const [freeText, setFreeText] = useState("");
@@ -395,7 +389,9 @@ export function PlannerForm() {
       day_span: daySpan,
       people,
       preferences: toApiPreferences(preferences),
-      pace,
+      // 逐天设置（长度 = days）。**不再发全局 pace**：那个控件已经不在了，
+      // 继续发一个界面上不存在的值等于把旧默认值偷渡进接口。
+      day_plans: dayPlans.map((plan) => ({ pace: plan.pace, theme: plan.theme })),
       budget:
         budgetDigits === ""
           ? null
@@ -414,13 +410,26 @@ export function PlannerForm() {
     });
   }
 
+  function updateDayPlan(index: number, patch: Partial<DayPlanInput>) {
+    setDayPlans((current) =>
+      current.map((plan, i) => (i === index ? { ...plan, ...patch } : plan)),
+    );
+  }
+
+  /** 换天数时同时把按天设置对齐 —— 两者长度不一致会被后端当成入参错误。 */
+  function changeDays(next: number) {
+    const clamped = clamp(next, 1, 3);
+    setDays(clamped);
+    setDayPlans((current) => resizeDayPlans(current, clamped));
+  }
+
   function applyExample(example: string) {
     const draft = parseExample(example);
     const filled: string[] = [DEFAULT_CITY];
 
     setCity(DEFAULT_CITY);
     if (draft.days !== null) {
-      setDays(clamp(draft.days, 1, 3));
+      changeDays(draft.days);
       filled.push(`${clamp(draft.days, 1, 3)} 天`);
     }
     if (draft.people !== null) {
@@ -439,7 +448,9 @@ export function PlannerForm() {
       filled.push(label === undefined ? draft.daySpan : label);
     }
     if (draft.pace !== null) {
-      setPace(draft.pace);
+      // 示例里的"不想太累"是一句**整趟**的说法，所以施加到每一天；
+      // 用户之后仍然可以逐天改回来。
+      setDayPlans((current) => current.map((plan) => ({ ...plan, pace: draft.pace as Pace })));
       const label = PACE_OPTIONS.find(
         (option) => option.value === draft.pace,
       )?.label;
@@ -537,7 +548,7 @@ export function PlannerForm() {
             legend="天数"
             value={days}
             options={DAY_OPTIONS}
-            onChange={setDays}
+            onChange={changeDays}
           />
 
           <Segmented
@@ -581,13 +592,58 @@ export function PlannerForm() {
             </p>
           </div>
 
-          <Segmented
-            name="planner-pace"
-            legend="节奏"
-            value={pace}
-            options={PACE_OPTIONS}
-            onChange={setPace}
-          />
+          {/* 按天设置：节奏决定那一天每站待多久/能走多远，主题决定那一天围绕什么展开。
+              以前只有一个全局「节奏」，于是"第 1 天慢慢吃、第 2 天多看几个"根本表达不出来。 */}
+          <div className="sm:col-span-2">
+            <span className={LABEL_CLASS}>每天怎么玩</span>
+            <p className="mt-1.5 text-xs leading-relaxed text-ink-faint">
+              节奏管那一天待多久、走多远；主题是那一天的主轴（不选就按上面的偏好排）。
+              主题只影响那一天 —— 选「文化」的那天会把候选收窄到文化类地点，
+              凑不够时会在方案里写清楚凑到了几个。
+            </p>
+            <div className="mt-3 space-y-2">
+              {dayPlans.map((plan, index) => (
+                <div
+                  key={index}
+                  data-testid={`planner-day-${index + 1}`}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[10px] border border-line/70 bg-sand/40 px-3 py-2"
+                >
+                  <span className="tnum shrink-0 text-xs font-medium text-ink-soft">
+                    第 {index + 1} 天
+                  </span>
+                  <Segmented
+                    className="min-w-0 flex-1"
+                    hideLegend
+                    name={`planner-day-${index + 1}-pace`}
+                    legend={`第 ${index + 1} 天节奏`}
+                    value={plan.pace}
+                    options={PACE_OPTIONS}
+                    onChange={(next) => updateDayPlan(index, { pace: next })}
+                  />
+                  <label className="flex min-w-0 shrink-0 items-center gap-2">
+                    <span className="text-xs text-ink-soft">主题</span>
+                    <select
+                      aria-label={`第 ${index + 1} 天主题`}
+                      value={plan.theme ?? ""}
+                      onChange={(event) =>
+                        updateDayPlan(index, {
+                          theme: event.currentTarget.value || null,
+                        })
+                      }
+                      className="min-h-9 rounded-btn border border-line bg-shell px-2 text-sm text-ink focus:border-teal"
+                    >
+                      <option value="">不设主题</option>
+                      {PREFERENCE_OPTIONS.map((option) => (
+                        <option key={option.api} value={option.api}>
+                          {option.emoji} {option.key}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
 
           <div className="sm:col-span-2">
             <label htmlFor="planner-budget" className={LABEL_CLASS}>

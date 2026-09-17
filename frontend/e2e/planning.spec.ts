@@ -38,7 +38,11 @@ test("E2E-03 完整输入提交：发出的 payload 是接口取值，不是界�
   // 直接 .check() 会撞上"元素不可见/不稳定"（第一版就是这么挂的）
   await page.locator("label[for='planner-pref-美食']").click();
   await page.locator("label[for='planner-pref-拍照']").click();
-  await chooseSegment(page, "节奏", "轻松");
+  // 节奏与主题都是**按天**的（不再有全局「节奏」控件）。天数 = 1 时只有第 1 天一行。
+  await chooseSegment(page, "第 1 天节奏", "轻松");
+  // 主题下拉的选项文字带表情（"🍜 美食"），而 value 必须是枚举 key ——
+  // 这就是这一条用例要盯的事，所以用 selectOption 的 **value** 而不是文字。
+  await page.getByLabel("第 1 天主题").selectOption("food");
   await page.getByLabel("预算", { exact: true }).fill("300");
   await page.getByLabel("补充要求（可选）").fill("想吃早茶，走路别太多");
 
@@ -50,7 +54,9 @@ test("E2E-03 完整输入提交：发出的 payload 是接口取值，不是界�
   const payload = JSON.parse(payloadText) as Record<string, unknown>;
   expect(payload.city).toBe("guangzhou");
   expect(payload.preferences).toEqual(["food", "photo"]);
-  expect(payload.pace).toBe("relaxed");
+  // 不再发全局 `pace`：节奏随天走。这条断言同时钉住"长度 = days"（多一天就多一条，
+  // 少了后端只会按兜底值排，界面上的选择被静默丢弃）。
+  expect(payload.day_plans).toEqual([{ pace: "relaxed", theme: "food" }]);
   expect(payload.day_span).toBe("half_day");
   expect(payload.budget).toEqual({ amount: 300, scope: "per_person" });
   expect(payload.free_text).toBe("想吃早茶，走路别太多");

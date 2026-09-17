@@ -12,7 +12,35 @@
  */
 
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+/**
+ * 把地图换成"只会转交两样东西"的替身：**testid 与点击回调**。
+ *
+ * 为什么这里不渲染真地图：真地图只在浏览器里能跑（要加载高德 SDK），
+ * 而它自己的行为（坐标纠偏、标记、错误态）已经由 `route-map.test.tsx` 覆盖。
+ * 这个文件要守的是**联动**：点标记之后哪一行被高亮、地图与时间线谁显示谁隐藏。
+ */
+vi.mock("@/components/route-map", () => ({
+  RouteMap: ({
+    label,
+    points,
+    onSelectPoint,
+  }: {
+    label: string;
+    points: { seq: number; name: string }[];
+    onSelectPoint?: (seq: number) => void;
+  }) => (
+    <div data-testid={`route-map-${label}`}>
+      {points.length > 1 ? (
+        <button type="button" onClick={() => onSelectPoint?.(points[1]?.seq ?? 0)}>
+          模拟点击第 2 个标记
+        </button>
+      ) : null}
+    </div>
+  ),
+}));
 
 import type { TripOut, TripRoute } from "@/lib/api";
 import { formatStopWarning, TripResultView } from "@/components/trip-result";
@@ -333,5 +361,62 @@ describe("多日行程按天分组", () => {
     const legacy = FULL_ROUTE.stops.map(({ day: _day, ...rest }) => rest);
     const card = renderWithStops(legacy);
     expect(within(card).queryByText(/第 1 天/)).not.toBeInTheDocument();
+  });
+});
+
+describe("移动端的地图 / 时间线切换（AC-7.2）", () => {
+  it("默认看时间线：手机上的第一屏是能读的行程，而不是一张要捏合的地图", () => {
+    render(<TripResultView trip={TRIP} />);
+
+    // 两块 DOM 都在（桌面端要同时显示，靠断点切换显示）——
+    // 所以断言的是**窄屏显隐**那个 class，而不是"有没有渲染"。
+    expect(screen.getByTestId("timeline-A").className).not.toContain("hidden");
+    const mapWrapper = screen.getByTestId("route-map-A").parentElement;
+    expect(mapWrapper?.className).toContain("hidden sm:block");
+
+    const tabs = screen.getByTestId("mobile-pane-A");
+    expect(within(tabs).getByRole("tab", { name: "时间线" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("切到地图后时间线让位（同一时间只显示一块，避免同屏挤压）", async () => {
+    render(<TripResultView trip={TRIP} />);
+
+    await userEvent.click(screen.getByTestId("mobile-pane-A-map"));
+
+    expect(screen.getByTestId("timeline-A").className).toContain("hidden sm:block");
+    const mapWrapper = screen.getByTestId("route-map-A").parentElement;
+    expect(mapWrapper?.className).not.toContain("hidden");
+    // 切换控件只在窄屏出现：大屏上多一个控件会让人以为"有什么被藏起来了"
+    expect(screen.getByTestId("mobile-pane-A").className).toContain("sm:hidden");
+  });
+});
+
+describe("地图标记与时间线的联动（AC-7.1）", () => {
+  it("点击地图标记后，对应站点行被高亮（其余行保持原样）", async () => {
+    render(<TripResultView trip={TRIP} />);
+
+    // 行程里有不止一套方案，每一套都有一张地图：断言要限定在方案 A 的卡片里，
+    // 否则"点 A 的高亮跑到 B 去了"这种串台反而查不出来。
+    const cardA = within(screen.getByTestId("trip-route-A"));
+    const rows = () =>
+      screen
+        .getAllByRole("listitem")
+        .filter(
+          (row) =>
+            row.dataset.highlighted !== undefined &&
+            screen.getByTestId("trip-route-A").contains(row),
+        );
+    expect(rows()).toHaveLength(0);
+
+    // 点地图标记（替身把它转成 onSelectPoint(2)），高亮应由卡片自己算出来
+    await userEvent.click(cardA.getByRole("button", { name: "模拟点击第 2 个标记" }));
+
+    const highlighted = rows();
+    expect(highlighted).toHaveLength(1);
+    // 被点亮的是**第二个站点那一行**（序号来自地图交出来的那个值，不是位置猜测）
+    expect(highlighted[0]?.textContent).toContain(FULL_ROUTE.stops[1]?.name ?? "");
   });
 });

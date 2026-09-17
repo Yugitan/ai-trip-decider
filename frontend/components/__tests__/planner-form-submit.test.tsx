@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +13,8 @@ import {
   type ApiResult,
   type TripOut,
 } from "@/lib/api";
-import { PREFERENCE_OPTIONS, PlannerForm } from "@/components/planner-form";
+import { PlannerForm } from "@/components/planner-form";
+import { PREFERENCE_OPTIONS } from "@/lib/preferences";
 
 /**
  * 读后端的 `config/scoring.yaml`，把 `preference_dimensions` 的键抠出来。
@@ -116,10 +117,17 @@ const DEFAULT_PAYLOAD = {
   day_span: "full_day",
   people: 2,
   preferences: [],
-  pace: "relaxed",
+  // 节奏/主题是**按天**设置的，所以这里是一份长度等于 days 的列表。
+  // 不再有全局 `pace`：那个控件已经不在了（见 planner-form 的注释）。
+  day_plans: [{ pace: "relaxed", theme: null }],
   budget: { amount: 300, scope: "per_person" },
   free_text: "",
 };
+
+/** 取某一天的节奏控件（参见 `planner-form.test.tsx` 里同一个 helper 的理由）。 */
+function dayPace(day: number) {
+  return within(screen.getByRole("group", { name: `第 ${day} 天节奏` }));
+}
 
 describe("PlannerForm 提交", () => {
   beforeEach(() => {
@@ -152,7 +160,10 @@ describe("PlannerForm 提交", () => {
     // 「玩几天」与「每天玩多久」是两个独立字段：只改前者的话，本地人想玩半天
     // 就只能自己去改结束时间 —— 所以这两个控件各要有一个改过的值进 payload。
     await user.click(screen.getByRole("radio", { name: "半天" }));
-    await user.click(screen.getByRole("radio", { name: "紧凑" }));
+    // 节奏与主题都是**逐天**设置的：这里只改第 2 天，用来钉住"哪一天设的东西
+    // 就落在哪一天"（曾经只有一个全局节奏，第 2 天想多跑几个根本表达不出来）。
+    await user.click(dayPace(2).getByRole("radio", { name: "紧凑" }));
+    await user.selectOptions(screen.getByLabelText("第 2 天主题"), "culture");
     await user.click(screen.getByRole("checkbox", { name: /夜景/ }));
     await user.click(screen.getByRole("checkbox", { name: /美食/ }));
     await user.click(screen.getByRole("radio", { name: "总计" }));
@@ -164,7 +175,11 @@ describe("PlannerForm 提交", () => {
       day_span: "half_day",
       people: 2,
       preferences: ["food", "night_view"],
-      pace: "packed",
+      day_plans: [
+        { pace: "relaxed", theme: null },
+        { pace: "packed", theme: "culture" },
+        { pace: "relaxed", theme: null },
+      ],
       budget: { amount: 300, scope: "total" },
       free_text: "",
     });
@@ -266,8 +281,10 @@ describe("PlannerForm 后端未实现时的处理", () => {
     const payloadBlock = screen.getByTestId("plan-payload");
     expect(JSON.parse(payloadBlock.textContent ?? "")).toEqual(DEFAULT_PAYLOAD);
 
-    // 绝不出现编造的路线数据
-    expect(screen.queryByText(/第 ?1 ?天/)).toBeNull();
+    // 绝不出现编造的路线数据。
+    // （不能用"页面上有没有「第 1 天」"当代理：表单自己现在就有按天设置的行，
+    //   那句文案已经不能区分"设置"与"编出来的行程"了，所以改查结果容器本身。）
+    expect(screen.queryByTestId("trip-result")).toBeNull();
     expect(screen.queryByText(/路线详情/)).toBeNull();
     expect(screen.queryByText("后端已接受这次规划请求")).toBeNull();
 

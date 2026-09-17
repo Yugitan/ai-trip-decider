@@ -11,6 +11,26 @@ import {
 } from "@/lib/amap";
 
 /**
+ * 站点圆形标记的三种角色（PRD AC-7.1：起点与终点必须能区分）。
+ *
+ * 用内联样式的 HTML 而不是默认的红色大头针：默认图标**全体一个样子**，
+ * 于是"哪一头是起点"只能靠读序号猜 —— 而序号从 1 开始这件事本身没有任何提示。
+ * 颜色取自设计系统里已有的语义色（起点=青绿、终点=珊瑚、中间=墨色）。
+ *
+ * ★ 这里不做任何字符串插值 ★ 标记的内容只由"序号 + 角色"决定，
+ * 两者都不是用户数据（序号是我们自己的计数），所以不存在把地名塞进 HTML 的问题。
+ */
+function markerContent(seq: number, role: "start" | "end" | "middle"): string {
+  const background = role === "start" ? "#0f766e" : role === "end" ? "#e07a5f" : "#20242c";
+  const text = role === "start" ? "起" : role === "end" ? "终" : String(seq);
+  return (
+    `<div style="display:flex;align-items:center;justify-content:center;` +
+    `width:22px;height:22px;border-radius:9999px;background:${background};` +
+    `color:#efe9dd;font-size:11px;line-height:1;border:2px solid #efe9dd">${text}</div>`
+  );
+}
+
+/**
  * 一张小地图：把某套方案的站点按顺序标出来。
  *
  * ★ 三条渲染纪律（与后端 `TripStop` 的字段边界一一对应）★
@@ -20,7 +40,10 @@ import {
  *    所以那条虚线只说明「谁在谁前面」，图注里必须写清楚它不是实际路线 ——
  *    画一条像马路一样的线却不说明，就是让用户以为我们有路线数据；
  * 3. **画不出来就说明白**：缺 Key / 脚本加载失败 / 坐标不全会各给一句真话，
- *    而不是留一个灰盒子，或者只画一半的点位。
+ *    而不是留一个灰盒子，或者只画一半的点位；
+ * 4. **起点与终点必须一眼能分**（AC-7.1）：默认图标全体一个样子，
+ *    光有序号看不出哪头是起点 —— 所以自己画标记（青绿「起」/ 珊瑚「终」），
+ *    并让点击 Marker 能高亮时间线里的那一站。
  *
  * ★ 每套方案各一张（最多 3 张）★
  * 高德 2.0 每个地图实例占一个 WebGL 上下文，3 张在桌面与移动端都还安全。
@@ -40,12 +63,24 @@ export type RouteMapState =
 export function RouteMap({
   points,
   label,
+  onSelectPoint,
 }: {
   points: MapPoint[];
   label: string;
+  /**
+   * 点某个 Marker 时把它的序号交出去（PRD AC-7.1）。
+   *
+   * 回调走 ref 而不是 effect 依赖：这个函数每次渲染都是新的，
+   * 直接进依赖数组会让"点一下"重建整张地图（WebGL 上下文反复销毁重建，肉眼可见地闪）。
+   */
+  onSelectPoint?: (seq: number) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<RouteMapState>({ kind: "loading" });
+  const selectRef = useRef(onSelectPoint);
+  useEffect(() => {
+    selectRef.current = onSelectPoint;
+  }, [onSelectPoint]);
 
   // 依赖用「点的指纹」而不是数组本身：每次渲染 `points` 都是新数组，
   // 直接进依赖数组会让 effect 每帧重建地图（并反复销毁上一个 WebGL 上下文）。
@@ -98,13 +133,19 @@ export function RouteMap({
         });
 
         plottable.forEach((point, index) => {
-          overlays.push(
-            new amap.Marker({
-              position: path[index],
-              title: point.name,
-              label: { content: String(point.seq), direction: "top" },
-            }),
-          );
+          // 起点与终点按**位置**判定（第一站 / 最后一站），不是按序号大小 ——
+          // 序号由后端给，但"谁是第一个走到的"才是用户关心的那件事。
+          const role: "start" | "end" | "middle" =
+            index === 0 ? "start" : index === plottable.length - 1 ? "end" : "middle";
+          const marker = new amap.Marker({
+            position: path[index],
+            title: `${point.seq}. ${point.name}`,
+            content: markerContent(point.seq, role),
+            anchor: "center",
+          });
+          // 点击 → 高亮时间线里对应的那一站（单向：时间线是高亮的目标，不反过来驱动地图）
+          marker.on("click", () => selectRef.current?.(point.seq));
+          overlays.push(marker);
         });
 
         if (path.length > 1) {
@@ -178,7 +219,7 @@ export function RouteMap({
 
       {state.kind === "ready" ? (
         <figcaption className="mt-1.5 text-[11px] leading-relaxed text-ink-faint">
-          {`站点位置示意图（方案 ${label}） · 虚线只表示站点的先后顺序，不是实际行车路线；显示坐标已按高德坐标系纠偏。`}
+          {`站点位置示意图（方案 ${label}） · 青绿「起」是起点、珊瑚「终」是终点，数字是中间站点的顺序；虚线只表示先后顺序，不是实际行车路线；显示坐标已按高德坐标系纠偏。点击标记可定位到下面时间线里的那一站。`}
         </figcaption>
       ) : null}
     </figure>

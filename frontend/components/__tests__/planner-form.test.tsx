@@ -1,8 +1,19 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { PlannerForm, parseExample } from "@/components/planner-form";
+
+/**
+ * 取某一天的节奏控件。
+ *
+ * 节奏从 M8 起是**按天**设置的，所以页面上有 N 组同名选项（"轻松"出现 N 次）——
+ * `getByRole("radio", { name: "轻松" })` 会直接因"匹配到多个"而失败。
+ * 每组的可访问名来自 `Segmented` 的 legend（"第 N 天节奏"），按它限定范围即可。
+ */
+function dayPace(day: number) {
+  return within(screen.getByRole("group", { name: `第 ${day} 天节奏` }));
+}
 
 // 只替换网络函数，保留真实的 ApiError / NetworkError 类，
 // 这样组件里的 instanceof / name 判断走的是同一条路径。
@@ -22,7 +33,8 @@ describe("PlannerForm 默认值", () => {
     expect(screen.getByLabelText("目的地")).toHaveValue("广州");
     expect(screen.getByRole("radio", { name: "1 天" })).toBeChecked();
     expect(screen.getByLabelText("人数")).toHaveValue("2");
-    expect(screen.getByRole("radio", { name: "轻松" })).toBeChecked();
+    expect(dayPace(1).getByRole("radio", { name: "轻松" })).toBeChecked();
+    expect(screen.getByLabelText("第 1 天主题")).toHaveValue("");
     expect(screen.getByLabelText("预算")).toHaveValue("300");
     expect(screen.getByRole("radio", { name: "每人" })).toBeChecked();
     expect(screen.getByLabelText(/补充要求/)).toHaveValue("");
@@ -84,7 +96,9 @@ describe("PlannerForm 示例一键填入", () => {
     );
 
     expect(screen.getByRole("radio", { name: "2 天" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "轻松" })).toBeChecked();
+    // 示例里的"不想太累"是一句整趟的说法：**每一天**都应被设成轻松
+    expect(dayPace(1).getByRole("radio", { name: "轻松" })).toBeChecked();
+    expect(dayPace(2).getByRole("radio", { name: "轻松" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /美食/ })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /拍照/ })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: /情侣/ })).toBeChecked();

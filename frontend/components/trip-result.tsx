@@ -21,6 +21,7 @@ import {
   formatTransport,
   lookupLabel,
 } from "@/lib/format";
+import { formatPreference } from "@/lib/preferences";
 
 /**
  * 行程的**渲染层**：把一份 `TripOut` 画成能读的路线卡片（纯展示 + 取回行程的 hook）。
@@ -67,6 +68,25 @@ export function groupByDay(stops: readonly TripStop[]): [number, TripStop[]][] {
   return days;
 }
 
+/**
+ * 从意图快照里取出「第几天 → 主题」，用来在分组标题上写「第 2 天 · 文化日」。
+ *
+ * 快照是**历史数据**（可能来自旧版本的响应、也可能被手工改过），所以逐字段容错：
+ * 读不懂就当没设过主题 —— 在界面上编一个主题比不写要糟糕得多。
+ */
+export function dayThemesOf(trip: TripOut): Record<number, string> {
+  const raw = trip.intent?.day_plans;
+  if (!Array.isArray(raw)) return {};
+  const themes: Record<number, string> = {};
+  raw.forEach((entry, index) => {
+    if (typeof entry !== "object" || entry === null) return;
+    const plan = entry as { day?: unknown; theme?: unknown };
+    const day = typeof plan.day === "number" ? plan.day : index + 1;
+    if (typeof plan.theme === "string" && plan.theme) themes[day] = plan.theme;
+  });
+  return themes;
+}
+
 /** 站点级校验码 → 人话。码是给机器看的，这一层负责翻译。 */
 export const STOP_WARNING_LABELS: Readonly<Record<string, string>> = {
   HOURS_UNKNOWN: "营业时间未知，出发前请确认",
@@ -81,12 +101,20 @@ export function formatStopWarning(code: string): string {
   return lookupLabel(STOP_WARNING_LABELS, code) ?? code;
 }
 
-function StopRow({ stop }: { stop: TripStop }) {
+function StopRow({ stop, highlighted = false }: { stop: TripStop; highlighted?: boolean }) {
   const warnings = stop.warnings ?? [];
   const estimated = stop.transport_source === "estimated";
 
   return (
-    <li className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-sm">
+    <li
+      // 地图上点了某个标记时，对应这一行会被高亮（AC-7.1）。
+      // `data-highlighted` 同时服务于样式与测试：断言看的是"哪一行被选中"，
+      // 而不是某个 class 名（class 名会随视觉调整而变）。
+      data-highlighted={highlighted ? "true" : undefined}
+      className={`flex flex-wrap items-baseline gap-x-2.5 gap-y-1 rounded-[6px] text-sm transition-colors duration-300 ${
+        highlighted ? "bg-teal-tint px-1.5 py-0.5" : ""
+      }`}
+    >
       <span className="tnum shrink-0 text-xs text-ink-faint">
         {stop.arrive_time}–{stop.depart_time}
       </span>
@@ -133,7 +161,14 @@ function Badge({ label, title }: { label: string; title?: string }) {
   );
 }
 
-export function TripRouteCard({ route }: { route: TripRoute }) {
+export function TripRouteCard({
+  route,
+  dayThemes = {},
+}: {
+  route: TripRoute;
+  /** 第几天 → 主题键（来自意图快照，见 ``dayThemesOf``）；缺省 = 没有按天主题 */
+  dayThemes?: Record<number, string>;
+}) {
   const violations = route.feasibility?.violations ?? [];
   // `at_seq` 为 null = 整条路线的问题（如"有项目没有价格"）；不为 null = 某个站点的问题，
   // 已经在站点行上标过了。分开渲染，同一件事才不会说两遍。
@@ -143,6 +178,14 @@ export function TripRouteCard({ route }: { route: TripRoute }) {
   const unknownItems = route.budget_unknown_items ?? [];
   // 是否显示「第 N 天」分组标题：只有真的跨天了才显示
   const multiDay = (route.stops ?? []).some((stop) => (stop.day ?? 1) > 1);
+  // 地图上被点中的站点序号（null = 没选）。
+  // 状态放在卡片级别：地图与时间线是同一个东西的两种画法，
+  // 选中态属于"这条路线的当前关注点"，而不是地图自己或时间线自己的事。
+  const [selectedSeq, setSelectedSeq] = useState<number | null>(null);
+  // 窄屏下地图与时间线只显示一块（AC-7.2）。桌面端两块**都要在**，
+  // 所以这里控制的是"窄屏显示哪一块"，不是"渲染不渲染"——
+  // 用同一份 DOM 靠断点切换，避免两套结构各自长歪。
+  const [mobilePane, setMobilePane] = useState<"map" | "timeline">("timeline");
   // 估算项与未知项**相反**：这些钱算进去了，只是单价是假设。
   // 两件事分开渲染 —— 只写"预算含估算值"的话，读者仍不知道 ¥19.59 里到到底有什么。
   const estimatedItems = route.budget_estimated_items ?? [];
@@ -210,26 +253,72 @@ export function TripRouteCard({ route }: { route: TripRoute }) {
 
       {/* 地图画不出自己的三种情况（缺 Key / 加载失败 / 坐标不全）都会在卡片里说明，
           站点列表不受影响 —— 所以这里总是渲染，由它自己决定画什么。 */}
-      <RouteMap
-        label={route.label}
-        points={route.stops.map((stop) => ({
-          seq: stop.seq,
-          name: stop.name,
-          latitude: stop.latitude,
-          longitude: stop.longitude,
-        }))}
-      />
+      {/* 窄屏下的"地图 / 时间线"切换（AC-7.2）。桌面端两块同时显示，
+          这个控件用 `sm:hidden` 隐藏 —— 大屏上不存在需要腾地方的问题，
+          多一个控件只会让人以为"有什么被藏起来了"。 */}
+      <div
+        role="tablist"
+        aria-label={`方案 ${route.label} 的地图与时间线`}
+        data-testid={`mobile-pane-${route.label}`}
+        className="mt-3 flex gap-1 rounded-full border border-line bg-sand p-1 sm:hidden"
+      >
+        {(
+          [
+            { key: "map", label: "地图" },
+            { key: "timeline", label: "时间线" },
+          ] as const
+        ).map((pane) => (
+          <button
+            key={pane.key}
+            type="button"
+            role="tab"
+            aria-selected={mobilePane === pane.key}
+            onClick={() => setMobilePane(pane.key)}
+            data-testid={`mobile-pane-${route.label}-${pane.key}`}
+            className={`min-h-11 flex-1 rounded-full px-4 text-xs transition-colors duration-300 ${
+              mobilePane === pane.key ? "bg-ink text-sand" : "text-ink-soft"
+            }`}
+          >
+            {pane.label}
+          </button>
+        ))}
+      </div>
+
+      <div className={mobilePane === "map" ? "block" : "hidden sm:block"}>
+        <RouteMap
+          label={route.label}
+          onSelectPoint={setSelectedSeq}
+          points={route.stops.map((stop) => ({
+            seq: stop.seq,
+            name: stop.name,
+            latitude: stop.latitude,
+            longitude: stop.longitude,
+          }))}
+        />
+      </div>
 
       {route.stops.length > 0 ? (
         // 多日行程按「第几天」分组渲染：一条站点流水账里跨天的站点看不出哪天走哪段，
         // 而且第二天的 09:00 紧接在第一天的 18:00 后面会让人以为时间倒退。
         // 单日行程只有一组，标题也就不显示（不然白占一行）。
-        <div className="mt-3 space-y-3 border-t border-line pt-3">
+        <div
+          data-testid={`timeline-${route.label}`}
+          className={`mt-3 space-y-3 border-t border-line pt-3 ${
+            mobilePane === "timeline" ? "block" : "hidden sm:block"
+          }`}
+        >
           {groupByDay(route.stops).map(([day, stops]) => (
             <div key={day}>
-              {multiDay ? (
+              {multiDay || dayThemes[day] ? (
                 <p className="mb-1.5 text-xs font-medium text-ink-soft">
                   第 {day} 天
+                  {dayThemes[day] ? (
+                    // 主题是**那一天的主轴**，而徽章在站点行上容易被读成"这一站恰好也…"，
+                    // 所以分组标题上要再说一次（两处指的是同一件事）
+                    <span className="ml-1.5 rounded-full bg-teal-tint px-2 py-0.5 font-normal text-teal-dark">
+                      {formatPreference(dayThemes[day])}日
+                    </span>
+                  ) : null}
                   <span className="tnum ml-2 font-normal text-ink-faint">
                     {stops[0]?.arrive_time}–{stops[stops.length - 1]?.depart_time}
                   </span>
@@ -237,7 +326,11 @@ export function TripRouteCard({ route }: { route: TripRoute }) {
               ) : null}
               <ol className="space-y-2">
                 {stops.map((stop) => (
-                  <StopRow key={`${stop.seq}-${stop.place_id}`} stop={stop} />
+                  <StopRow
+                    key={`${stop.seq}-${stop.place_id}`}
+                    stop={stop}
+                    highlighted={selectedSeq === stop.seq}
+                  />
                 ))}
               </ol>
             </div>
@@ -365,7 +458,11 @@ export function TripResultView({ trip }: { trip: TripOut }) {
           <RouteCompare routes={trip.routes} />
           <ol className="mt-4 space-y-4">
             {trip.routes.map((route) => (
-              <TripRouteCard key={route.id} route={route} />
+              <TripRouteCard
+                key={route.id}
+                route={route}
+                dayThemes={dayThemesOf(trip)}
+              />
             ))}
           </ol>
         </>

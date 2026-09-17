@@ -13,19 +13,13 @@ import { expect, type Page } from "@playwright/test";
  * 所以这类用例数量要克制（当前只有 2 个）。
  */
 
-/** 表单默认值对应的 payload（`planner-form.tsx` 的默认状态）。 */
-export const DEFAULT_PAYLOAD = {
-  city: "guangzhou",
-  days: 1,
-  // 「玩几天」与「每天玩多久」是两个控件，各有一个默认值；漏掉任何一个，
-  // 这份"默认表单长什么样"的记录就不再等于用户真的交上去的东西。
-  day_span: "full_day",
-  people: 2,
-  preferences: [],
-  pace: "relaxed",
-  budget: { amount: 300, scope: "per_person" },
-  free_text: "",
-} as const;
+/**
+ * ⛔这里曾经有一份 `DEFAULT_PAYLOAD`（"默认表单交上去长什么样"）。已删除，因为：
+ * 它没有任何地方用（真正在比对的是 `components/__tests__/planner-form-submit.test.tsx`
+ * 里那份同名常量），而"没有任何地方用"意味着它不会跟着表单一起改 ——
+ * `pace` 从全局控件改成按天的 `day_plans` 时，它就悄悄变成了一句假话。
+ * 一份没人读的"现状记录"比没有更坏：它会让人以为默认值还是那样。
+ */
 
 /**
  * 第三方 SDK 自己的噪声 —— **逐条写明为什么不是我们的问题**。
@@ -82,7 +76,10 @@ export function routeCards(page: Page) {
 }
 
 /**
- * 选一个分段控件（`ui/segmented.tsx`：天数 / 每天玩多久 / 节奏 / 预算口径）。
+ * 选一个分段控件（`ui/segmented.tsx`：天数 / 每天玩多久 / 逐天节奏 / 预算口径）。
+ *
+ * `legend` 要写全：节奏现在是**按天**的一组分组，名字是「第 N 天节奏」——
+ * 只写「节奏」会一个也匹配不上（多个分组同名时也无法区分是哪一天）。
  *
  * ★ 为什么不是 `getByRole("radio").check()` ★
  * radio 的真身是 `sr-only`（1px、被裁剪），上面盖着 `<label>`，Playwright 去点那个

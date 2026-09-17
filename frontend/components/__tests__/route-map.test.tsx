@@ -47,6 +47,7 @@ function makeFakeAmap() {
   const created = {
     lngLats: [] as [number, number][],
     markers: [] as Record<string, unknown>[],
+    markerInstances: [] as { click: () => void }[],
     polylines: [] as Record<string, unknown>[],
     added: [] as unknown[],
     fitViewCalls: 0,
@@ -69,8 +70,17 @@ function makeFakeAmap() {
     }
   }
   class FakeMarker {
+    handlers: Record<string, (() => void)[]> = {};
     constructor(public options: Record<string, unknown>) {
       created.markers.push(options);
+      created.markerInstances.push(this);
+    }
+    on(event: string, handler: () => void) {
+      this.handlers[event] = [...(this.handlers[event] ?? []), handler];
+    }
+    /** 模拟用户点了一下这个标记（测试用，不参与生产代码）。 */
+    click() {
+      for (const handler of this.handlers["click"] ?? []) handler();
     }
     setMap() {}
   }
@@ -205,21 +215,18 @@ describe("RouteMap 画得出来", () => {
     });
   });
 
-  it("每个点一个带序号的标记，并按顺序连成一条虚线", async () => {
+  it("每个点一个标记（序号进 title），并按顺序连成一条虚线", async () => {
     const { created, namespace } = makeFakeAmap();
     loadAmapMock.mockResolvedValue({ ok: true, amap: namespace as never });
     render(<RouteMap points={STOPS} label="A" />);
 
     await waitFor(() => expect(created.markers).toHaveLength(3));
-    expect(
-      created.markers.map(
-        (marker) => (marker.label as { content: string }).content,
-      ),
-    ).toEqual(["1", "2", "3"]);
+    // 序号进 title（悬停可见）而不是 label：标记的内容现在是自绘的圆点，
+    // 序号对中间站点在圆点里、对起终点由「起 / 终」占据。
     expect(created.markers.map((marker) => marker.title)).toEqual([
-      "广州塔",
-      "海心沙",
-      "陈家祠",
+      "1. 广州塔",
+      "2. 海心沙",
+      "3. 陈家祠",
     ]);
 
     expect(created.polylines).toHaveLength(1);
@@ -228,8 +235,43 @@ describe("RouteMap 画得出来", () => {
     // 线是虚线，且图注必须说清它不是实际路线（不是靠颜色暗示）
     expect(polyline.strokeStyle).toBe("dashed");
     expect(
-      screen.getByText(/虚线只表示站点的先后顺序，不是实际行车路线/),
+      screen.getByText(/虚线只表示先后顺序，不是实际行车路线/),
     ).toBeInTheDocument();
+  });
+
+  it("★ 起点与终点必须能区分（AC-7.1）★", async () => {
+    const { created, namespace } = makeFakeAmap();
+    loadAmapMock.mockResolvedValue({ ok: true, amap: namespace as never });
+    render(<RouteMap points={STOPS} label="A" />);
+    await waitFor(() => expect(created.markers).toHaveLength(3));
+
+    const contents = created.markers.map((marker) => String(marker.content ?? ""));
+    // 起点与终点用汉字标出来：默认图标全体一个样子，光看序号猜不出哪头是起点
+    expect(at(contents, 0)).toContain("起");
+    expect(at(contents, 2)).toContain("终");
+    // 中间站点显示自己的序号，且颜色与起终点都不同
+    expect(at(contents, 1)).toContain(">2<");
+    const colors = contents.map((html) => /background:(#[0-9a-f]{6})/.exec(html)?.[1]);
+    expect(new Set(colors).size).toBe(3);
+    expect(at(colors, 0)).not.toBe(at(colors, 2));
+
+    // 图注也要把这件事说成文字（配色不是唯一的表达方式）
+    expect(screen.getByText(/青绿「起」是起点、珊瑚「终」是终点/)).toBeInTheDocument();
+  });
+
+  it("点击标记把序号交给调用方（用于高亮时间线里的那一站）", async () => {
+    const { created, namespace } = makeFakeAmap();
+    loadAmapMock.mockResolvedValue({ ok: true, amap: namespace as never });
+    const onSelectPoint = vi.fn();
+    render(<RouteMap points={STOPS} label="A" onSelectPoint={onSelectPoint} />);
+    await waitFor(() => expect(created.markers).toHaveLength(3));
+
+    at(created.markerInstances, 1).click();
+    expect(onSelectPoint).toHaveBeenCalledWith(2);
+
+    // 没传回调时点击也不能抛（地图不该因为"没人接这个事件"而崩）
+    onSelectPoint.mockClear();
+    expect(() => at(created.markerInstances, 0).click()).not.toThrow();
   });
 
   it("只有一个站点时不画线（一条线要两个点，画一条零长度的线没有意义）", async () => {

@@ -44,6 +44,15 @@ export interface AmapOverlay {
   setMap(map: AmapMap | null): void;
 }
 
+/**
+ * 覆盖物的事件订阅。**只声明我们真的用到的那个**：
+ * 目前只有"点击 Marker 高亮对应时间线项"（PRD AC-7.1），
+ * 把整个高德的事件系统搬进来只会多一份要跟着它升级的类型面。
+ */
+export interface AmapMarkerOverlay extends AmapOverlay {
+  on(event: "click", handler: () => void): void;
+}
+
 export interface AmapMap {
   add(overlays: AmapOverlay[]): void;
   setFitView(overlays?: AmapOverlay[], immediately?: boolean): void;
@@ -55,7 +64,7 @@ export interface AmapNamespace {
     container: HTMLElement | string,
     options?: Record<string, unknown>,
   ) => AmapMap;
-  Marker: new (options: Record<string, unknown>) => AmapOverlay;
+  Marker: new (options: Record<string, unknown>) => AmapMarkerOverlay;
   Polyline: new (options: Record<string, unknown>) => AmapOverlay;
   LngLat: new (longitude: number, latitude: number) => AmapLngLat;
 }
